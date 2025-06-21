@@ -1,30 +1,56 @@
-# Automated scientific app
+# 🤖 iArtigo - Geração de Artigos Científicos com IA
 
-*Automatically synced with your [v0.dev](https://v0.dev) deployments*
+Plataforma inteligente para geração automática de artigos científicos com formatação ABNT, gráficos e citações.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/nathaliaoliveira1986-3269s-projects/v0-automated-scientific-app)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.dev-black?style=for-the-badge)](https://v0.dev/chat/projects/cQtNCpDeBhH)
+## 🚀 Deploy
 
-## Overview
+Este projeto está configurado para deploy automático na Vercel.
 
-This repository will stay in sync with your deployed chats on [v0.dev](https://v0.dev).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.dev](https://v0.dev).
+### 📋 Variáveis de Ambiente Necessárias:
 
-## Deployment
+\`\`\`env
+# App
+NEXT_PUBLIC_APP_URL=https://seudominio.com
 
-Your project is live at:
+# Hotmart (após aprovação)
+HOTMART_WEBHOOK_SECRET=seu_webhook_secret
 
-**[https://vercel.com/nathaliaoliveira1986-3269s-projects/v0-automated-scientific-app](https://vercel.com/nathaliaoliveira1986-3269s-projects/v0-automated-scientific-app)**
+# Database (opcional)
+DATABASE_URL=sua_database_url
 
-## Build your app
+# Email (opcional)
+RESEND_API_KEY=sua_chave_resend
+\`\`\`
 
-Continue building your app on:
+### 🔧 Comandos:
 
-**[https://v0.dev/chat/projects/cQtNCpDeBhH](https://v0.dev/chat/projects/cQtNCpDeBhH)**
+\`\`\`bash
+# Desenvolvimento
+npm run dev
 
-## How It Works
+# Build
+npm run build
 
-1. Create and modify your project using [v0.dev](https://v0.dev)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+# Deploy
+git push origin main
+\`\`\`
+
+## 📊 Status
+
+- ✅ Interface completa
+- ✅ Integração Hotmart
+- ✅ Sistema de pagamento
+- ✅ Webhook configurado
+- ⏳ Aguardando aprovação produtos
+
+## 🎯 Próximos Passos
+
+1. Aprovação produtos Hotmart
+2. Configurar URLs reais
+3. Implementar banco de dados
+4. Sistema de autenticação
+5. Dashboard do usuário
+
+---
+
+Desenvolvido com ❤️ para automatizar a geração de artigos científicos.

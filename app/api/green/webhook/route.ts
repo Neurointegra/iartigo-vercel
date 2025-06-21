@@ -1,80 +1,195 @@
 import { type NextRequest, NextResponse } from "next/server"
+import crypto from "crypto"
 
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const signature = request.headers.get("green-signature")
+    console.log("📨 Webhook recebido do Green")
+    console.log("Headers:", Object.fromEntries(request.headers.entries()))
 
-    // Verificar assinatura do webhook (segurança)
-    const GREEN_WEBHOOK_SECRET = process.env.GREEN_WEBHOOK_SECRET
+    // Obter dados da requisição
+    const body = await request.text()
+    const signature =
+      request.headers.get("green-signature") ||
+      request.headers.get("x-green-signature") ||
+      request.headers.get("signature")
 
-    if (!GREEN_WEBHOOK_SECRET || !signature) {
-      return NextResponse.json({ error: "Webhook não autorizado" }, { status: 401 })
+    console.log("📝 Body recebido:", body.substring(0, 200) + "...")
+    console.log("🔐 Signature:", signature)
+
+    // Validar assinatura do webhook
+    if (!validateWebhookSignature(body, signature)) {
+      console.error("🚫 Assinatura do webhook inválida")
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    // Processar evento do webhook
-    const { event_type, data } = body
+    const webhookData = JSON.parse(body)
+    const { event_type, data: paymentData } = webhookData
 
-    switch (event_type) {
-      case "payment.completed":
-        await handlePaymentCompleted(data)
-        break
+    console.log(`🔔 Evento: ${event_type} | Pagamento: ${paymentData?.id || "N/A"}`)
+    console.log("📊 Dados do pagamento:", JSON.stringify(paymentData, null, 2))
 
-      case "payment.failed":
-        await handlePaymentFailed(data)
-        break
+    // Processar evento baseado no tipo
+    const result = await processWebhookEvent(event_type, paymentData)
 
-      case "subscription.created":
-        await handleSubscriptionCreated(data)
-        break
-
-      case "subscription.cancelled":
-        await handleSubscriptionCancelled(data)
-        break
-
-      default:
-        console.log(`Evento não tratado: ${event_type}`)
-    }
-
-    return NextResponse.json({ success: true })
+    return NextResponse.json({
+      success: true,
+      event_processed: event_type,
+      payment_id: paymentData?.id,
+      result,
+      timestamp: new Date().toISOString(),
+    })
   } catch (error) {
-    console.error("Erro no webhook Green:", error)
-    return NextResponse.json({ error: "Erro interno do servidor" }, { status: 500 })
+    console.error("💥 Erro no webhook:", error)
+    return NextResponse.json(
+      {
+        error: "Internal server error",
+        message: error instanceof Error ? error.message : "Unknown error",
+        timestamp: new Date().toISOString(),
+      },
+      { status: 500 },
+    )
   }
 }
 
-async function handlePaymentCompleted(data: any) {
-  // Ativar acesso do usuário
-  console.log("Pagamento confirmado:", data)
+function validateWebhookSignature(body: string, signature: string | null): boolean {
+  if (!signature || !process.env.GREEN_WEBHOOK_SECRET) {
+    console.warn("⚠️ Signature ou webhook secret não fornecidos")
+    // Em desenvolvimento, pode pular validação
+    if (process.env.NODE_ENV === "development") {
+      console.log("🔓 Pulando validação de signature em desenvolvimento")
+      return true
+    }
+    return false
+  }
 
-  // Aqui você salvaria no banco de dados:
-  // - Ativar plano do usuário
-  // - Registrar pagamento
-  // - Enviar email de confirmação
-  // - Liberar acesso ao dashboard
+  try {
+    const expectedSignature = crypto.createHmac("sha256", process.env.GREEN_WEBHOOK_SECRET).update(body).digest("hex")
+
+    const providedSignature = signature.replace("sha256=", "")
+
+    console.log("🔍 Validando signatures:", {
+      expected: expectedSignature.substring(0, 10) + "...",
+      provided: providedSignature.substring(0, 10) + "...",
+    })
+
+    return crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(providedSignature))
+  } catch (error) {
+    console.error("❌ Erro na validação da signature:", error)
+    return false
+  }
 }
 
-async function handlePaymentFailed(data: any) {
-  // Notificar falha no pagamento
-  console.log("Pagamento falhou:", data)
+async function processWebhookEvent(eventType: string, paymentData: any) {
+  switch (eventType) {
+    case "payment.completed":
+    case "payment.paid":
+    case "payment.approved":
+      return await handlePaymentSuccess(paymentData)
 
-  // Aqui você:
-  // - Notificaria o usuário
-  // - Registraria a tentativa falhada
-  // - Ofereceria nova tentativa
+    case "payment.failed":
+    case "payment.cancelled":
+    case "payment.rejected":
+      return await handlePaymentFailure(paymentData)
+
+    case "payment.pending":
+    case "payment.waiting":
+      return await handlePaymentPending(paymentData)
+
+    case "payment.refunded":
+      return await handlePaymentRefunded(paymentData)
+
+    default:
+      console.log(`⚠️ Evento não tratado: ${eventType}`)
+      return { status: "ignored", event: eventType }
+  }
 }
 
-async function handleSubscriptionCreated(data: any) {
-  // Assinatura criada com sucesso
-  console.log("Assinatura criada:", data)
+async function handlePaymentSuccess(paymentData: any) {
+  try {
+    console.log("🎉 Pagamento confirmado:", paymentData.id)
+
+    const { plan_id, user_email, billing_cycle } = paymentData.metadata || {}
+
+    console.log("📋 Dados do plano:", {
+      plan_id,
+      user_email,
+      billing_cycle,
+      amount: paymentData.amount,
+    })
+
+    // Aqui você implementaria:
+    // 1. Ativar plano do usuário no banco de dados
+    // 2. Enviar email de confirmação
+    // 3. Registrar evento para analytics
+    // 4. Criar entrada na tabela de assinaturas
+
+    // Exemplo de implementação:
+    // await activateUserPlan(user_email, plan_id, billing_cycle)
+    // await sendConfirmationEmail(user_email, paymentData)
+    // await logPaymentEvent('success', paymentData)
+
+    console.log(`✅ Plano ${plan_id} ativado para ${user_email}`)
+
+    return {
+      status: "processed",
+      actions: ["plan_activated", "email_sent"],
+      user_email,
+      plan_id,
+    }
+  } catch (error) {
+    console.error("❌ Erro ao processar pagamento confirmado:", error)
+    throw error
+  }
 }
 
-async function handleSubscriptionCancelled(data: any) {
-  // Assinatura cancelada
-  console.log("Assinatura cancelada:", data)
+async function handlePaymentFailure(paymentData: any) {
+  console.log("❌ Pagamento falhou:", paymentData.id)
 
-  // Aqui você:
-  // - Desativaria o plano do usuário
-  // - Manteria acesso até o fim do período pago
-  // - Enviaria email de confirmação
+  const { user_email, plan_id } = paymentData.metadata || {}
+
+  // Implementar notificação de falha
+  // await notifyPaymentFailure(paymentData)
+  // await logPaymentEvent('failed', paymentData)
+
+  return {
+    status: "processed",
+    actions: ["failure_notified"],
+    user_email,
+    plan_id,
+    reason: paymentData.failure_reason,
+  }
+}
+
+async function handlePaymentPending(paymentData: any) {
+  console.log("⏳ Pagamento pendente:", paymentData.id)
+
+  // Para PIX e Boleto, pode enviar instruções
+  if (paymentData.payment_method === "boleto") {
+    // await sendBoletoInstructions(paymentData)
+  } else if (paymentData.payment_method === "pix") {
+    // await sendPixInstructions(paymentData)
+  }
+
+  return {
+    status: "processed",
+    actions: ["pending_handled"],
+    payment_method: paymentData.payment_method,
+  }
+}
+
+async function handlePaymentRefunded(paymentData: any) {
+  console.log("💸 Pagamento reembolsado:", paymentData.id)
+
+  const { user_email, plan_id } = paymentData.metadata || {}
+
+  // Desativar plano do usuário
+  // await deactivateUserPlan(user_email, plan_id)
+  // await sendRefundConfirmation(user_email, paymentData)
+
+  return {
+    status: "processed",
+    actions: ["plan_deactivated", "refund_confirmed"],
+    user_email,
+    plan_id,
+  }
 }

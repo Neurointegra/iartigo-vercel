@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        .banner {
+            width: 1200px;
+            height: 628px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            color: white;
+            font-family: 'Arial', sans-serif;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .content {
+            flex: 1;
+            padding: 60px;
+            z-index: 2;
+        }
+        
+        .title {
+            font-size: 48px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+        
+        .subtitle {
+            font-size: 24px;
+            margin-bottom: 30px;
+            opacity: 0.9;
+        }
+        
+        .features {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+        
+        .features li {
+            font-size: 18px;
+            margin-bottom: 10px;
+            padding-left: 30px;
+            position: relative;
+        }
+        
+        .features li:before {
+            content: "✅";
+            position: absolute;
+            left: 0;
+        }
+        
+        .price {
+            font-size: 36px;
+            font-weight: bold;
+            margin-top: 30px;
+            background: rgba(255,255,255,0.2);
+            padding: 15px 30px;
+            border-radius: 10px;
+            display: inline-block;
+        }
+        
+        .visual {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative;
+        }
+        
+        .mockup {
+            width: 400px;
+            height: 300px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+        }
+        
+        .mockup-header {
+            height: 40px;
+            background: #f5f5f5;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            padding: 0 15px;
+            color: #666;
+            font-size: 14px;
+        }
+        
+        .mockup-content {
+            flex: 1;
+            background: #fafafa;
+            border-radius: 8px;
+            padding: 15px;
+            color: #333;
+            font-size: 12px;
+            line-height: 1.4;
+        }
+        
+        .decoration1 {
+            position: absolute;
+            top: -50px;
+            right: -50px;
+            width: 200px;
+            height: 200px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+        }
+        
+        .decoration2 {
+            position: absolute;
+            bottom: -100px;
+            left: -100px;
+            width: 300px;
+            height: 300px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 50%;
+        }
+    </style>
+</head>
+<body>
+    <div class="banner">
+        <div class="decoration1"></div>
+        <div class="decoration2"></div>
+        
+        <div class="content">
+            <div class="title">iArtigo Pro</div>
+            <div class="subtitle">Gere Artigos Científicos com IA</div>
+            
+            <ul class="features">
+                <li>5 artigos científicos por mês</li>
+                <li>Formatação automática ABNT</li>
+                <li>Gráficos e tabelas profissionais</li>
+                <li>Citações automáticas</li>
+                <li>Exportação PDF e Word</li>
+            </ul>
+            
+            <div class="price">R$ 79,00/mês</div>
+        </div>
+        
+        <div class="visual">
+            <div class="mockup">
+                <div class="mockup-header">🤖 iArtigo - Gerador de Artigos</div>
+                <div class="mockup-content">
+                    <strong>Título:</strong> Inteligência Artificial na Educação<br><br>
+                    <strong>Resumo:</strong> Este artigo apresenta uma análise abrangente sobre o impacto da inteligência artificial no setor educacional...<br><br>
+                    <strong>Palavras-chave:</strong> IA, Educação, Tecnologia<br><br>
+                    <strong>Status:</strong> ✅ Artigo gerado com sucesso!
+                </div>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
