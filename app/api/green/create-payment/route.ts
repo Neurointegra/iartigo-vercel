@@ -1,4 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { greenClient } from "@/lib/green-client"
 
 export async function POST(request: NextRequest) {
   try {
@@ -11,25 +12,6 @@ export async function POST(request: NextRequest) {
       customer_email: body.customer?.email,
       amount: body.amount,
     })
-
-    // Verificar se as variáveis de ambiente estão configuradas
-    const GREEN_API_KEY = process.env.GREEN_API_KEY
-    const GREEN_API_URL = process.env.GREEN_API_URL || "https://api.green.com.br/v1"
-
-    if (!GREEN_API_KEY) {
-      console.error("❌ GREEN_API_KEY não configurada")
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Configuração de pagamento não encontrada. Entre em contato com o suporte.",
-          code: "CONFIG_ERROR",
-        },
-        { status: 500 },
-      )
-    }
-
-    console.log("🔑 Usando API Key:", GREEN_API_KEY.substring(0, 10) + "...")
-    console.log("🌐 URL da API:", GREEN_API_URL)
 
     // Validar dados obrigatórios
     const { plan_id, payment_method, customer, billing_cycle } = body
@@ -97,7 +79,7 @@ export async function POST(request: NextRequest) {
       description,
     })
 
-    // Preparar dados para Green API
+    // Preparar dados para Green
     const paymentData = {
       amount,
       currency: "BRL",
@@ -123,72 +105,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log("🚀 Enviando para Green API...")
-    console.log("📦 Payload:", JSON.stringify(paymentData, null, 2))
-
-    // Fazer requisição para Green API
-    const response = await fetch(`${GREEN_API_URL}/payments`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${GREEN_API_KEY}`,
-        "Content-Type": "application/json",
-        "User-Agent": "iArtigo/1.0",
-      },
-      body: JSON.stringify(paymentData),
-    })
-
-    const responseText = await response.text()
-    console.log("📥 Resposta Green (status):", response.status)
-    console.log("📥 Resposta Green (headers):", Object.fromEntries(response.headers.entries()))
-    console.log("📥 Resposta Green (body):", responseText)
-
-    if (!response.ok) {
-      console.error("❌ Erro Green API:", {
-        status: response.status,
-        statusText: response.statusText,
-        body: responseText,
-      })
-
-      // Tentar parsear erro
-      let errorMessage = "Erro no processamento do pagamento"
-      try {
-        const errorData = JSON.parse(responseText)
-        errorMessage = errorData.message || errorData.error || errorMessage
-      } catch {
-        errorMessage = `Erro ${response.status}: ${response.statusText}`
-      }
-
-      return NextResponse.json(
-        {
-          success: false,
-          error: errorMessage,
-          details: {
-            status: response.status,
-            statusText: response.statusText,
-            response: responseText.substring(0, 500), // Primeiros 500 chars
-          },
-        },
-        { status: 400 },
-      )
-    }
-
-    // Parsear resposta de sucesso
-    let greenResponse
-    try {
-      greenResponse = JSON.parse(responseText)
-    } catch (error) {
-      console.error("❌ Erro ao parsear resposta:", error)
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Resposta inválida da API de pagamento",
-          details: responseText.substring(0, 200),
-        },
-        { status: 500 },
-      )
-    }
+    const greenResponse = await greenClient.createPayment(paymentData)
 
     // Preparar resposta baseada no método de pagamento
-    const response_data: any = {
+    const response: any = {
       success: true,
       payment_id: greenResponse.id,
       status: greenResponse.status,
@@ -198,20 +118,20 @@ export async function POST(request: NextRequest) {
     }
 
     if (payment_method === "credit_card") {
-      response_data.checkout_url = greenResponse.checkout_url
-      response_data.redirect_url = greenResponse.checkout_url
+      response.checkout_url = greenResponse.checkout_url
+      response.redirect_url = greenResponse.checkout_url
     } else if (payment_method === "pix") {
-      response_data.pix_code = greenResponse.pix?.qr_code
-      response_data.pix_qr_code_base64 = greenResponse.pix?.qr_code_base64
-      response_data.expires_at = greenResponse.pix?.expires_at
+      response.pix_code = greenResponse.pix?.qr_code
+      response.pix_qr_code_base64 = greenResponse.pix?.qr_code_base64
+      response.expires_at = greenResponse.pix?.expires_at
     } else if (payment_method === "boleto") {
-      response_data.boleto_url = greenResponse.boleto?.url
-      response_data.boleto_barcode = greenResponse.boleto?.barcode
-      response_data.expires_at = greenResponse.boleto?.expires_at
+      response.boleto_url = greenResponse.boleto?.url
+      response.boleto_barcode = greenResponse.boleto?.barcode
+      response.expires_at = greenResponse.boleto?.expires_at
     }
 
-    console.log("✅ Pagamento criado com sucesso:", response_data.payment_id)
-    return NextResponse.json(response_data)
+    console.log("✅ Pagamento criado com sucesso:", response.payment_id)
+    return NextResponse.json(response)
   } catch (error) {
     console.error("❌ Erro na API de pagamento:", error)
 
@@ -226,8 +146,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Erro interno do servidor. Tente novamente em alguns minutos.",
-        details: error instanceof Error ? error.message : "Erro desconhecido",
+        error: error instanceof Error ? error.message : "Erro interno do servidor",
         timestamp: new Date().toISOString(),
       },
       { status: 500 },
