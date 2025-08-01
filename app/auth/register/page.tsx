@@ -9,14 +9,17 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
-import { Mail, Lock, Eye, EyeOff, User, Building, ArrowLeft, CheckCircle } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Mail, Lock, Eye, EyeOff, User, Building, ArrowLeft, CheckCircle, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
   const [step, setStep] = useState(1)
   const [formData, setFormData] = useState({
     name: "",
@@ -29,21 +32,49 @@ export default function RegisterPage() {
     plan: "basic",
   })
   const router = useRouter()
+  const { register } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError("")
+    
     if (step === 1) {
+      // Validações do primeiro passo
+      if (formData.password !== formData.confirmPassword) {
+        setError("As senhas não coincidem")
+        return
+      }
+      if (formData.password.length < 6) {
+        setError("A senha deve ter pelo menos 6 caracteres")
+        return
+      }
       setStep(2)
       return
     }
 
     setIsLoading(true)
 
-    // Simular registro
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    const result = await register({
+      email: formData.email,
+      password: formData.password,
+      name: formData.name,
+      institution: formData.institution,
+      department: formData.area,
+      role: formData.role,
+      area: formData.area,
+      plan: formData.plan,
+    })
 
-    // Redirecionar para pagamento
-    router.push("/payment")
+    if (result.success) {
+      if (formData.plan === "basic") {
+        router.push("/dashboard")
+      } else {
+        router.push("/payment")
+      }
+    } else {
+      setError(result.error || "Erro no registro")
+    }
+
     setIsLoading(false)
   }
 
@@ -98,6 +129,13 @@ export default function RegisterPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
             <form onSubmit={handleSubmit} className="space-y-4">
               {step === 1 ? (
                 <>

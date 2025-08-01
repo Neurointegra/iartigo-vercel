@@ -8,28 +8,36 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Mail, Lock, Eye, EyeOff, ArrowLeft } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, AlertCircle } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { useAuth } from "@/lib/auth-context"
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState("")
   const [formData, setFormData] = useState({
     email: "",
     password: "",
   })
   const router = useRouter()
+  const { login } = useAuth()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setIsLoading(true)
+    setError("")
 
-    // Simular login
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    const result = await login(formData.email, formData.password)
 
-    // Redirecionar para o dashboard
-    router.push("/")
+    if (result.success) {
+      router.push("/dashboard")
+    } else {
+      setError(result.error || "Erro no login")
+    }
+
     setIsLoading(false)
   }
 
@@ -57,6 +65,13 @@ export default function LoginPage() {
             <CardDescription>Digite suas credenciais para acessar sua conta</CardDescription>
           </CardHeader>
           <CardContent>
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">E-mail</Label>
@@ -65,13 +80,16 @@ export default function LoginPage() {
                   <Input
                     id="email"
                     type="email"
-                    placeholder="seu@email.com"
+                    placeholder="maria.silva@universidade.edu.br"
                     className="pl-10"
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     required
                   />
                 </div>
+                <p className="text-xs text-gray-500">
+                  Usuário de teste: maria.silva@universidade.edu.br (senha: 123456)
+                </p>
               </div>
 
               <div className="space-y-2">

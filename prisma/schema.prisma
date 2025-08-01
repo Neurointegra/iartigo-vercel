@@ -1,0 +1,160 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id          String   @id @default(cuid())
+  email       String   @unique
+  password    String   // Hash da senha
+  name        String
+  institution String?
+  department  String?
+  city        String?
+  country     String   @default("Brasil")
+  avatar      String?
+  plan        String   @default("Por Artigo") // "Por Artigo", "Profissional", "Institucional"
+  planType    String   @default("per-article") // "per-article", "monthly", "annual"
+  creditsRemaining Int @default(0)
+  articlesLimit    Int?
+  articlesUsed     Int @default(0)
+  isEmailVerified  Boolean @default(false)
+  lastLoginAt      DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  articles    Article[]
+  payments    Payment[]
+  
+  @@map("users")
+}
+
+model Article {
+  id                   String   @id @default(cuid())
+  title                String
+  abstract             String?
+  keywords             String?
+  citationStyle        String?
+  targetJournal        String?
+  fieldOfStudy         String?
+  methodology          String?
+  includeCharts        Boolean  @default(false)
+  includeTables        Boolean  @default(false)
+  researchObjectives   String?
+  hypothesis           String?
+  sampleSize           String?
+  dataCollection       String?
+  statisticalAnalysis  String?
+  status               String   @default("draft") // "draft", "generating", "completed", "error"
+  content              String?  // Generated article content
+  wordCount            Int      @default(0)
+  qualityScore         Float?
+  timeSpent            Int      @default(0) // minutes
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  // Relationships
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authors              Author[]
+  literatureSuggestions LiteratureSuggestion[]
+  
+  @@map("articles")
+}
+
+model Author {
+  id          String @id @default(cuid())
+  name        String
+  institution String?
+  email       String?
+  department  String?
+  city        String?
+  country     String @default("Brasil")
+  order       Int    @default(0) // Order in author list
+  createdAt   DateTime @default(now())
+
+  // Relationships
+  articleId   String
+  article     Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  
+  @@map("authors")
+}
+
+model LiteratureSuggestion {
+  id         String @id @default(cuid())
+  title      String
+  authors    String
+  journal    String
+  year       Int
+  doi        String?
+  abstract   String?
+  relevance  String?
+  citation   String
+  isSelected Boolean @default(false)
+  createdAt  DateTime @default(now())
+
+  // Relationships
+  articleId  String
+  article    Article @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  
+  @@map("literature_suggestions")
+}
+
+model Payment {
+  id              String   @id @default(cuid())
+  hotmartId       String?  @unique
+  amount          Float
+  currency        String   @default("BRL")
+  status          String   @default("pending") // "pending", "completed", "failed", "cancelled"
+  planType        String   // "per-article", "monthly", "annual"
+  creditsAmount   Int?     // For per-article payments
+  checkoutUrl     String?
+  paymentMethod   String?
+  transactionId   String?
+  processedAt     DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // Relationships
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("payments")
+}
+
+model Template {
+  id          String   @id @default(cuid())
+  name        String
+  description String?
+  category    String   // "scientific", "medical", "engineering", etc.
+  fieldOfStudy String?
+  structure   String   // JSON with template structure
+  isPublic    Boolean  @default(true)
+  usageCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  @@map("templates")
+}
+
+model Statistics {
+  id                String   @id @default(cuid())
+  date              DateTime @default(now())
+  totalArticles     Int      @default(0)
+  totalUsers        Int      @default(0)
+  totalPayments     Float    @default(0)
+  averageQuality    Float?
+  averageWordCount  Int?
+  popularKeywords   String?  // JSON array
+  popularJournals   String?  // JSON array
+  
+  @@map("statistics")
+}

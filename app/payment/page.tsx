@@ -3,17 +3,14 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { CreditCard, Shield, CheckCircle, ArrowLeft, Lock, QrCode, Building, DollarSign } from "lucide-react"
+import { CreditCard, Shield, CheckCircle, ArrowLeft, Lock, DollarSign } from "lucide-react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 export default function PaymentPage() {
   const [selectedPlan, setSelectedPlan] = useState("professional")
-  const [paymentMethod, setPaymentMethod] = useState("credit-card")
   const [isLoading, setIsLoading] = useState(false)
   const [billingType, setBillingType] = useState("monthly")
   const router = useRouter()
@@ -22,12 +19,14 @@ export default function PaymentPage() {
     "per-article": {
       name: "Por Artigo",
       price: 15,
+      monthlyPrice: 15, // Para consistência de tipo
       yearlyPrice: 15, // Mesmo preço pois é por artigo
       features: ["Pagamento por artigo gerado", "Formatação básica", "Suporte por email", "Exportação PDF"],
       billing: "per-use",
     },
     professional: {
       name: "Profissional",
+      price: 79, // Para consistência de tipo
       monthlyPrice: 79,
       yearlyPrice: 790, // 10 meses pelo preço de 12
       features: ["5 artigos por mês", "Todos os recursos", "Suporte prioritário", "Gráficos avançados"],
@@ -35,6 +34,7 @@ export default function PaymentPage() {
     },
     institutional: {
       name: "Institucional",
+      price: 2388, // Para consistência de tipo
       monthlyPrice: 199,
       yearlyPrice: 2388, // 12 meses obrigatório
       features: [
@@ -72,12 +72,12 @@ export default function PaymentPage() {
     setIsLoading(true)
 
     try {
-      // Integração com Green API
-      const greenPayment = await createGreenPayment()
+      // Integração com Hotmart API
+      const hotmartPayment = await createHotmartPayment()
 
-      if (greenPayment.success) {
-        // Redirecionar para dashboard após pagamento confirmado
-        router.push("/dashboard")
+      if (hotmartPayment.success) {
+        // O Hotmart retorna uma URL de checkout, então redirecionamos para lá
+        window.location.href = hotmartPayment.checkout_url
       } else {
         alert("Erro no pagamento. Tente novamente.")
       }
@@ -89,29 +89,22 @@ export default function PaymentPage() {
     }
   }
 
-  const createGreenPayment = async () => {
-    // Integração real com Green API
+  const createHotmartPayment = async () => {
+    // Integração com Hotmart API
     const paymentData = {
-      amount: currentPrice * 100, // Green usa centavos
-      currency: "BRL",
-      description: `iArtigo - Plano ${currentPlan.name} (${billingText})`,
+      plan_id: selectedPlan,
+      billing_cycle: billingType,
       customer: {
         name: "Nome do Cliente",
         email: "cliente@email.com",
+        phone: "(11) 99999-9999",
+        document: "123.456.789-00",
       },
-      payment_method: paymentMethod,
-      metadata: {
-        plan: selectedPlan,
-        billing: billingType,
-        product: "iartigo_subscription",
-      },
-      success_url: `${window.location.origin}/dashboard?payment=success`,
-      cancel_url: `${window.location.origin}/payment?payment=cancelled`,
     }
 
     try {
-      // Simular chamada para Green API
-      const response = await fetch("/api/green/create-payment", {
+      // Chamada para Hotmart API
+      const response = await fetch("/api/hotmart/create-payment", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -122,14 +115,16 @@ export default function PaymentPage() {
       const result = await response.json()
 
       if (result.success) {
-        // Redirecionar para URL de pagamento do Green
-        window.location.href = result.payment_url
-        return { success: true }
+        return { 
+          success: true, 
+          checkout_url: result.checkout_url,
+          payment_id: result.payment_id 
+        }
       }
 
       return { success: false, error: result.error }
     } catch (error) {
-      console.error("Erro na integração Green:", error)
+      console.error("Erro na integração Hotmart:", error)
       return { success: false, error: "Erro de conexão" }
     }
   }
@@ -242,84 +237,26 @@ export default function PaymentPage() {
                   <Shield className="h-5 w-5" />
                   Método de Pagamento
                 </CardTitle>
-                <CardDescription>Pagamento seguro processado pela Green</CardDescription>
+                <CardDescription>Pagamento seguro processado pelo Hotmart - Checkout otimizado</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="grid grid-cols-1 gap-3">
-                  <div
-                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                      paymentMethod === "credit-card"
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                    onClick={() => setPaymentMethod("credit-card")}
-                  >
-                    <div className="flex items-center gap-3">
-                      <CreditCard className="h-5 w-5 text-blue-600" />
-                      <div>
-                        <p className="font-medium">Cartão de Crédito</p>
-                        <p className="text-sm text-gray-600">Visa, Mastercard, Elo</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                      paymentMethod === "pix" ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"
-                    }`}
-                    onClick={() => setPaymentMethod("pix")}
-                  >
-                    <div className="flex items-center gap-3">
-                      <QrCode className="h-5 w-5 text-green-600" />
-                      <div>
-                        <p className="font-medium">PIX</p>
-                        <p className="text-sm text-gray-600">Pagamento instantâneo</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div
-                    className={`border rounded-lg p-4 cursor-pointer transition-all ${
-                      paymentMethod === "boleto"
-                        ? "border-blue-500 bg-blue-50"
-                        : "border-gray-200 hover:border-gray-300"
-                    }`}
-                    onClick={() => setPaymentMethod("boleto")}
-                  >
-                    <div className="flex items-center gap-3">
-                      <Building className="h-5 w-5 text-orange-600" />
-                      <div>
-                        <p className="font-medium">Boleto Bancário</p>
-                        <p className="text-sm text-gray-600">Vencimento em 3 dias úteis</p>
-                      </div>
+                <div className="p-4 bg-blue-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    <CreditCard className="h-5 w-5 text-blue-600" />
+                    <div>
+                      <p className="font-medium">Checkout Hotmart</p>
+                      <p className="text-sm text-gray-600">
+                        Cartão de Crédito, PIX, Boleto e mais opções disponíveis no checkout
+                      </p>
                     </div>
                   </div>
                 </div>
 
-                {paymentMethod === "credit-card" && (
-                  <div className="space-y-4 mt-6">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="cardName">Nome no cartão</Label>
-                        <Input id="cardName" placeholder="Nome completo" />
-                      </div>
-                      <div>
-                        <Label htmlFor="cardNumber">Número do cartão</Label>
-                        <Input id="cardNumber" placeholder="0000 0000 0000 0000" />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="expiry">Validade</Label>
-                        <Input id="expiry" placeholder="MM/AA" />
-                      </div>
-                      <div>
-                        <Label htmlFor="cvv">CVV</Label>
-                        <Input id="cvv" placeholder="123" />
-                      </div>
-                    </div>
-                  </div>
-                )}
+                <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+                  <p>✅ Múltiplas formas de pagamento</p>
+                  <p>✅ Processamento seguro</p>
+                  <p>✅ Checkout otimizado para conversão</p>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -385,7 +322,7 @@ export default function PaymentPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <CheckCircle className="h-4 w-4 text-green-500" />
-                    <span>Processado pela Green</span>
+                    <span>Processado pelo Hotmart</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <Lock className="h-4 w-4 text-green-500" />
