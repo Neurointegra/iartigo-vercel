@@ -3,10 +3,11 @@ import { ArticleService } from '@/lib/services/article.service'
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    const article = await ArticleService.getById(params.id)
+    const { id } = await context.params
+    const article = await ArticleService.getById(id)
     
     if (!article) {
       return NextResponse.json(
@@ -27,12 +28,13 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
+    const { id } = await context.params
     const data = await request.json()
     
-    const article = await ArticleService.update(params.id, data)
+    const article = await ArticleService.update(id, data)
     
     return NextResponse.json(article)
   } catch (error) {
@@ -46,10 +48,11 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  context: { params: Promise<{ id: string }> }
 ) {
   try {
-    await ArticleService.delete(params.id)
+    const { id } = await context.params
+    await ArticleService.delete(id)
     
     return NextResponse.json({ message: 'Article deleted successfully' })
   } catch (error) {

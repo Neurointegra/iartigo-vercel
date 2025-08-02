@@ -48,10 +48,12 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isHydrated, setIsHydrated] = useState(false)
   const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   // Verificar se usuário está logado ao carregar a página
   useEffect(() => {
+    setIsHydrated(true)
     checkAuth()
   }, [])
 
@@ -151,7 +153,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user,
-      isLoading,
+      isLoading: isLoading || !isHydrated,
       isAuthenticated,
       login,
       logout,

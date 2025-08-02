@@ -6,6 +6,26 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
+import { Textarea } from "@/components/ui/textarea"
+import { useToast } from "@/components/ui/use-toast"
+import { formatDate } from "@/lib/date-utils"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import {
   FileText,
   Eye,
@@ -29,6 +49,7 @@ import {
   Calendar,
   Clock,
   CheckCircle,
+  Trash2,
 } from "lucide-react"
 import { generateArticle, suggestLiterature } from "../actions"
 import Link from "next/link"
@@ -59,7 +80,7 @@ interface LiteratureSuggestion {
 interface RecentArticle {
   id: string
   title: string
-  status: "completed" | "generating" | "draft"
+  status: "completed" | "generating" | "draft" | "outline" | "review" | "published"
   createdAt: string
   wordCount: number
   journal: string
@@ -69,6 +90,7 @@ export default function DashboardPage() {
   // Sempre chamar hooks de autenticação primeiro
   const { user, logout, isLoading } = useAuth()
   const router = useRouter()
+  const { toast } = useToast()
 
   // Estados locais - todos devem ser declarados antes de qualquer early return
   const [isGenerating, setIsGenerating] = useState(false)
@@ -77,6 +99,10 @@ export default function DashboardPage() {
   const [literatureSuggestions, setLiteratureSuggestions] = useState<LiteratureSuggestion[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [recentArticles, setRecentArticles] = useState<RecentArticle[]>([])
+  const [quickPrompt, setQuickPrompt] = useState("")
+  const [isQuickGenerating, setIsQuickGenerating] = useState(false)
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
+  const [articleToDelete, setArticleToDelete] = useState<{id: string, title: string} | null>(null)
   const [authors, setAuthors] = useState<Author[]>([
     {
       id: "1",
@@ -136,6 +162,84 @@ export default function DashboardPage() {
     router.push('/')
   }
 
+  const handleQuickGenerate = async () => {
+    if (!quickPrompt.trim()) {
+      toast({
+        title: "Descrição necessária",
+        description: "Por favor, digite uma descrição para o artigo",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsQuickGenerating(true)
+    try {
+      // Dados básicos para geração rápida
+      const articleData = {
+        title: quickPrompt.slice(0, 100), // Usar o prompt como título inicial
+        abstract: "",
+        keywords: "",
+        citationStyle: "ABNT",
+        targetJournal: "",
+        fieldOfStudy: "Geral",
+        methodology: "Revisão de Literatura",
+        includeCharts: false,
+        includeTables: false,
+        researchObjectives: quickPrompt,
+        hypothesis: "",
+        sampleSize: "",
+        dataCollection: "",
+        statisticalAnalysis: "",
+        authors: [],
+        literatureSuggestions: [],
+        userId: user?.id
+      }
+
+      const content = await generateArticle(articleData)
+      
+      // Criar novo artigo no banco
+      const response = await fetch('/api/articles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: quickPrompt.slice(0, 100),
+          content: content,
+          abstract: "",
+          keywords: "",
+          status: "draft",
+          citationStyle: "ABNT",
+          targetJournal: "",
+          fieldOfStudy: "Geral",
+          userId: user?.id
+        }),
+      })
+
+      if (response.ok) {
+        const newArticle = await response.json()
+        // Redirecionar para visualizar o artigo criado
+        router.push(`/article/${newArticle.id}`)
+        setQuickPrompt("") // Limpar o campo
+      } else {
+        toast({
+          title: "Erro ao salvar",
+          description: "Não foi possível salvar o artigo",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao gerar artigo:', error)
+      toast({
+        title: "Erro na geração",
+        description: "Erro ao gerar artigo. Tente novamente.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsQuickGenerating(false)
+    }
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -165,7 +269,11 @@ export default function DashboardPage() {
 
   const handleSuggestLiterature = async () => {
     if (!formData.fieldOfStudy || !formData.keywords) {
-      alert("Por favor, preencha a área de estudo e palavras-chave primeiro.")
+      toast({
+        title: "Campos obrigatórios",
+        description: "Por favor, preencha a área de estudo e palavras-chave primeiro.",
+        variant: "destructive",
+      })
       return
     }
 
@@ -193,6 +301,12 @@ export default function DashboardPage() {
         return "bg-blue-100 text-blue-800"
       case "draft":
         return "bg-yellow-100 text-yellow-800"
+      case "outline":
+        return "bg-purple-100 text-purple-800"
+      case "review":
+        return "bg-orange-100 text-orange-800"
+      case "published":
+        return "bg-emerald-100 text-emerald-800"
       default:
         return "bg-gray-100 text-gray-800"
     }
@@ -206,8 +320,148 @@ export default function DashboardPage() {
         return "Gerando..."
       case "draft":
         return "Rascunho"
+      case "outline":
+        return "Esboço"
+      case "review":
+        return "Em Revisão"
+      case "published":
+        return "Publicado"
       default:
         return "Desconhecido"
+    }
+  }
+
+  // Função para atualizar o status do artigo
+  const updateArticleStatus = async (articleId: string, newStatus: string) => {
+    try {
+      const response = await fetch(`/api/articles/${articleId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ status: newStatus }),
+      })
+
+      if (response.ok) {
+        // Atualizar a lista de artigos localmente
+        setRecentArticles(prev => 
+          prev.map(article => 
+            article.id === articleId 
+              ? { ...article, status: newStatus as RecentArticle['status'] }
+              : article
+          )
+        )
+        
+        toast({
+          title: "Status atualizado",
+          description: `Artigo marcado como "${getStatusText(newStatus)}"`,
+          variant: "default",
+        })
+      } else {
+        toast({
+          title: "Erro ao atualizar",
+          description: "Não foi possível atualizar o status do artigo",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error)
+      toast({
+        title: "Erro ao atualizar",
+        description: "Ocorreu um erro inesperado",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Função para criar um novo artigo
+  const handleCreateNewArticle = async () => {
+    try {
+      const response = await fetch('/api/articles', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          title: 'Novo Artigo',
+          content: '',
+          abstract: '',
+          keywords: '',
+          status: 'draft',
+          citationStyle: 'ABNT',
+          targetJournal: '',
+          fieldOfStudy: '',
+          userId: user?.id
+        }),
+      })
+
+      if (response.ok) {
+        const newArticle = await response.json()
+        toast({
+          title: "Artigo criado",
+          description: "Redirecionando para o editor...",
+          variant: "default",
+        })
+        // Redirecionar para a página do artigo
+        router.push(`/article/${newArticle.id}`)
+      } else {
+        toast({
+          title: "Erro ao criar artigo",
+          description: "Não foi possível criar o novo artigo",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao criar artigo:', error)
+      toast({
+        title: "Erro ao criar artigo",
+        description: "Ocorreu um erro inesperado",
+        variant: "destructive",
+      })
+    }
+  }
+
+  // Função para iniciar o processo de deletar um artigo
+  const handleDeleteArticle = (articleId: string, articleTitle: string) => {
+    setArticleToDelete({ id: articleId, title: articleTitle })
+    setDeleteDialogOpen(true)
+  }
+
+  // Função para confirmar a deleção do artigo
+  const confirmDeleteArticle = async () => {
+    if (!articleToDelete) return
+
+    try {
+      const response = await fetch(`/api/articles/${articleToDelete.id}`, {
+        method: 'DELETE',
+      })
+
+      if (response.ok) {
+        // Remover o artigo da lista local
+        setRecentArticles(prev => prev.filter(article => article.id !== articleToDelete.id))
+        
+        toast({
+          title: "Artigo deletado",
+          description: `O artigo "${articleToDelete.title}" foi removido com sucesso.`,
+          variant: "default",
+        })
+      } else {
+        toast({
+          title: "Erro ao deletar",
+          description: "Não foi possível deletar o artigo. Tente novamente.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao deletar artigo:', error)
+      toast({
+        title: "Erro ao deletar",
+        description: "Ocorreu um erro inesperado ao deletar o artigo.",
+        variant: "destructive",
+      })
+    } finally {
+      setDeleteDialogOpen(false)
+      setArticleToDelete(null)
     }
   }
 
@@ -264,13 +518,13 @@ export default function DashboardPage() {
                 <span className="text-lg font-bold text-gray-900">iArtigo</span>
               </div>
               <nav className="mt-5 flex-1 px-2 space-y-1">
-                <a
-                  href="#"
-                  className="bg-blue-50 text-blue-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
+                <button
+                  onClick={handleCreateNewArticle}
+                  className="bg-blue-50 text-blue-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left hover:bg-blue-100"
                 >
                   <Sparkles className="text-blue-500 mr-3 h-5 w-5" />
                   Novo Artigo
-                </a>
+                </button>
                 <a
                   href="#"
                   className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
@@ -417,6 +671,53 @@ export default function DashboardPage() {
               </Card>
 
               <div className="grid lg:grid-cols-3 gap-8">
+                {/* Quick AI Generator */}
+                <div className="lg:col-span-3 mb-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Sparkles className="h-5 w-5 text-purple-600" />
+                        Gerador Rápido de Artigo
+                      </CardTitle>
+                      <CardDescription>
+                        Descreva o que você quer pesquisar e a IA criará um artigo científico completo
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-4">
+                        <Textarea
+                          placeholder="Ex: Impactos da inteligência artificial na educação brasileira, métodos de análise de dados em saúde pública, sustentabilidade em empresas de tecnologia..."
+                          value={quickPrompt}
+                          onChange={(e) => setQuickPrompt(e.target.value)}
+                          className="min-h-[100px] resize-none"
+                        />
+                        <div className="flex justify-between items-center">
+                          <p className="text-sm text-gray-500">
+                            {quickPrompt.length}/500 caracteres
+                          </p>
+                          <Button 
+                            onClick={handleQuickGenerate}
+                            disabled={isQuickGenerating || !quickPrompt.trim()}
+                            className="bg-purple-600 hover:bg-purple-700"
+                          >
+                            {isQuickGenerating ? (
+                              <>
+                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                                Gerando...
+                              </>
+                            ) : (
+                              <>
+                                <Sparkles className="h-4 w-4 mr-2" />
+                                Gerar Artigo com IA
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+
                 {/* Quick Actions */}
                 <div className="lg:col-span-2">
                   <Card>
@@ -429,7 +730,11 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <Button className="h-24 flex-col gap-2" size="lg">
+                        <Button 
+                          className="h-24 flex-col gap-2" 
+                          size="lg"
+                          onClick={handleCreateNewArticle}
+                        >
                           <Plus className="h-6 w-6" />
                           <span>Novo Artigo</span>
                           <span className="text-xs opacity-75">Começar do zero</span>
@@ -469,13 +774,17 @@ export default function DashboardPage() {
                     <CardContent>
                       <div className="space-y-4">
                         {recentArticles.map((article) => (
-                          <div key={article.id} className="flex items-center justify-between p-4 border rounded-lg">
+                          <div 
+                            key={article.id} 
+                            className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                            onClick={() => router.push(`/article/${article.id}`)}
+                          >
                             <div className="flex-1">
                               <h3 className="font-medium text-gray-900 mb-1">{article.title}</h3>
                               <div className="flex items-center gap-4 text-sm text-gray-500">
                                 <span className="flex items-center gap-1">
                                   <Calendar className="h-4 w-4" />
-                                  {new Date(article.createdAt).toLocaleDateString("pt-BR")}
+                                  {formatDate(article.createdAt)}
                                 </span>
                                 <span>{article.wordCount > 0 ? `${article.wordCount} palavras` : "—"}</span>
                                 <span>{article.journal}</span>
@@ -483,8 +792,47 @@ export default function DashboardPage() {
                             </div>
                             <div className="flex items-center gap-3">
                               <Badge className={getStatusColor(article.status)}>{getStatusText(article.status)}</Badge>
-                              <Button variant="ghost" size="sm">
+                              <Select
+                                value={article.status}
+                                onValueChange={(newStatus: 'draft' | 'outline' | 'completed' | 'generating' | 'review' | 'published') => 
+                                  updateArticleStatus(article.id, newStatus)
+                                }
+                              >
+                                <SelectTrigger 
+                                  className="w-32"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="draft">Esboço</SelectItem>
+                                  <SelectItem value="outline">Outline</SelectItem>
+                                  <SelectItem value="completed">Completo</SelectItem>
+                                  <SelectItem value="generating">Gerando</SelectItem>
+                                  <SelectItem value="review">Revisão</SelectItem>
+                                  <SelectItem value="published">Publicado</SelectItem>
+                                </SelectContent>
+                              </Select>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  router.push(`/article/${article.id}`)
+                                }}
+                              >
                                 <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  handleDeleteArticle(article.id, article.title)
+                                }}
+                                className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </div>
                           </div>
@@ -584,6 +932,28 @@ export default function DashboardPage() {
       {sidebarOpen && (
         <div className="fixed inset-0 z-20 bg-black bg-opacity-50 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
+
+      {/* Dialog de confirmação de deleção */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deletar Artigo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja deletar o artigo "{articleToDelete?.title}"? 
+              Esta ação não pode ser desfeita e todos os dados do artigo serão permanentemente removidos.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmDeleteArticle}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Deletar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -15,6 +15,9 @@ export type CreateArticleData = {
   sampleSize?: string
   dataCollection?: string
   statisticalAnalysis?: string
+  content?: string
+  status?: string
+  wordCount?: number
   userId: string
 }
 
@@ -51,6 +54,15 @@ export type CreateLiteratureData = {
 export class ArticleService {
   // Create article
   static async create(data: CreateArticleData) {
+    // Verificar se o usuário existe
+    const user = await prisma.user.findUnique({
+      where: { id: data.userId }
+    })
+    
+    if (!user) {
+      throw new Error(`User with ID ${data.userId} does not exist`)
+    }
+    
     return await prisma.article.create({
       data,
       include: {
