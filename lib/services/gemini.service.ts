@@ -27,9 +27,18 @@ interface ArticleGenerationParams {
     fileName: string
     content?: string
     imageUrl?: string // URL da imagem salva
+    description?: string // Descrição da imagem para a IA
   }>
   includeCharts?: boolean
   chartIds?: string[] // IDs específicos dos gráficos a serem usados
+  attachedCharts?: Array<{
+    id: string
+    name: string
+    type: 'bar' | 'line' | 'pie' | 'scatter'
+    data: any
+    description: string
+    referenceId: string
+  }>
   includeTables?: boolean
 }
 
@@ -75,6 +84,46 @@ export class GeminiService {
     } catch (error) {
       console.error('Erro ao gerar seção com Gemini:', error)
       throw new Error('Falha na geração da seção')
+    }
+  }
+
+  static async analyzeImage(imageData: string, context: string = ""): Promise<string> {
+    try {
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' })
+      
+      const prompt = `
+Analise esta imagem no contexto de uma pesquisa acadêmica e forneça uma descrição detalhada e objetiva.
+
+CONTEXTO DA PESQUISA: ${context || 'Artigo científico'}
+
+INSTRUÇÕES:
+- Descreva objetivamente o que está mostrado na imagem
+- Identifique elementos relevantes para pesquisa acadêmica (gráficos, diagramas, processos, dados, etc.)
+- Use linguagem científica formal
+- Seja específico sobre números, percentuais, tendências se visíveis
+- Limite: 2-3 frases precisas e descritivas
+
+FORMATO DE RESPOSTA:
+Forneça apenas a descrição da imagem, sem comentários adicionais.
+
+Exemplo: "Gráfico de barras mostrando comparação de eficiência entre três métodos, com valores de 45%, 67% e 82% respectivamente"
+      `
+      
+      const imagePart = {
+        inlineData: {
+          data: imageData,
+          mimeType: "image/jpeg"
+        }
+      }
+      
+      const result = await model.generateContent([prompt, imagePart])
+      const response = await result.response
+      const text = response.text()
+      
+      return text.trim()
+    } catch (error) {
+      console.error('Erro ao analisar imagem com Gemini:', error)
+      return 'Imagem relacionada ao tema da pesquisa'
     }
   }
 
@@ -162,9 +211,23 @@ ${params.attachedFiles.map(file => {
     return `- Use "${file.fileName}" como base teórica na Revisão da Literatura${file.content ? ' - Incorpore as informações do conteúdo nas fundamentações teóricas' : ''}`
   } else if (file.type === 'image') {
     return `- OBRIGATÓRIO: Use EXATAMENTE a referência [Imagem: ${file.fileName}] (não invente outros nomes)
-  - Integre a imagem de forma natural no texto, explicando sua relevância
-  - Exemplo: "O processo metodológico é ilustrado na [Imagem: ${file.fileName}], demonstrando..."
-  - NÃO use imagens fictícias como "logo.png" ou "diagrama.jpg" - use APENAS "${file.fileName}"`
+  - CONTEÚDO DA IMAGEM: ${file.description || 'Imagem relacionada ao tema da pesquisa'}
+  - ESPAÇAMENTO: Sempre use <div style="margin: 30px 0;">[Imagem: ${file.fileName}]</div>
+  - CONTEXTO ANTES: Inclua parágrafo explicativo antes da imagem
+  - ANÁLISE DEPOIS: Inclua parágrafo de interpretação após a imagem
+  - Exemplo completo:
+    
+    <p>O processo metodológico adotado segue etapas específicas...</p>
+    
+    <div style="margin: 30px 0;">
+    [Imagem: ${file.fileName}]
+    </div>
+    
+    <p>Conforme ilustrado, ${file.description || 'a imagem demonstra os aspectos principais da pesquisa'}...</p>
+    
+  - NÃO use imagens fictícias como "logo.png" ou "diagrama.jpg" - use APENAS "${file.fileName}"
+  - Considere o conteúdo visual ao referenciar: ${file.description || 'adapte a descrição ao contexto'}
+  - DISTRIBUA: Máximo 1 imagem por seção, com pelo menos 2-3 parágrafos entre imagens`
   }
   return ''
 }).filter(Boolean).join('\n')}
@@ -197,94 +260,192 @@ ${params.chartIds.map((id, index) => `  * [CHART:${id}] - ${index === 0 ? 'na se
   * [CHART:tendencias_observadas] - Tendências observadas no estudo`
 }
 
-ORIENTAÇÕES PARA GRÁFICOS:
+${params.attachedCharts?.length ? 
+  `INFORMAÇÕES DETALHADAS DOS GRÁFICOS ANEXADOS:
+${params.attachedCharts.map(chart => 
+  `- [CHART:${chart.id}] - ${chart.name}
+  * Tipo: ${chart.type === 'bar' ? 'Gráfico de barras' : chart.type === 'line' ? 'Gráfico de linha' : chart.type === 'pie' ? 'Gráfico de pizza' : 'Gráfico de dispersão'}
+  * Descrição: ${chart.description}
+  * Dados principais: ${JSON.stringify(chart.data).substring(0, 100)}...
+  * Como referenciar: "Os dados apresentados em [CHART:${chart.id}] demonstram ${chart.description.toLowerCase()}"
+  * Contexto de uso: ${chart.type === 'bar' ? 'Ideal para comparações entre categorias' : chart.type === 'line' ? 'Ideal para mostrar tendências temporais' : chart.type === 'pie' ? 'Ideal para mostrar distribuições proporcionais' : 'Ideal para mostrar correlações entre variáveis'}`
+).join('\n')}
+
+` : ''}ORIENTAÇÕES PARA GRÁFICOS (COM ESPAÇAMENTO):
 - Integre os gráficos naturalmente nas seções apropriadas (Metodologia, Resultados, Discussão)
-- Contextualize cada gráfico explicando sua relevância
-- Exemplo: "Os resultados obtidos são apresentados no [CHART:${params.chartIds?.[1] || 'resultados_comparativo'}], evidenciando..."
+- SEMPRE adicione contexto ANTES: parágrafo explicando o que será mostrado
+- SEMPRE adicione análise DEPOIS: parágrafo interpretando os dados
+- Use espaçamento adequado: <div style="margin: 40px 0;">[CHART:id]</div>
+- Contextualize cada gráfico explicando sua relevância baseada nas informações fornecidas
+- Exemplo completo:
+  
+  <p>A análise dos dados coletados revela tendências importantes...</p>
+  
+  <div style="margin: 40px 0;">
+  [CHART:${params.chartIds?.[1] || 'resultados_comparativo'}]
+  </div>
+  
+  <p>Os resultados demonstram claramente que...</p>
+
 - Use APENAS os IDs fornecidos acima
 - NUNCA invente IDs próprios como chart_123456 ou similares
-- Distribua os gráficos em seções diferentes
+- Distribua os gráficos em seções diferentes com pelo menos 3 parágrafos entre eles
+- SEMPRE mencione o que o gráfico mostra baseado na descrição fornecida
 `
       : ''
 
-    return `Você é um redator científico profissional. Escreva um artigo acadêmico COMPLETO sem usar placeholders.
+    return `Você é um redator científico profissional especializado em artigos acadêmicos de alta qualidade. Crie um artigo científico COMPLETO e DETALHADO sem usar placeholders.
 
-TÍTULO DO ARTIGO: ${params.title}
-INFORMAÇÕES OBRIGATÓRIAS A USAR:
-- Área: ${params.fieldOfStudy}
-- Abstract EXATO: ${params.abstract}
-- Keywords EXATAS: ${params.keywords}
-- Metodologia: ${params.methodology}
-- Autores: ${authorsText}
+    INFORMAÇÕES OBRIGATÓRIAS:
+    • Título: ${params.title}
+    • Área de Estudo: ${params.fieldOfStudy}
+    • Metodologia: ${params.methodology}
+    • Autores: ${authorsText}
+    • Abstract LITERAL: "${params.abstract}"
+    • Keywords LITERAIS: "${params.keywords}"
 
-IMPORTANTE: Use EXATAMENTE o abstract e keywords fornecidos acima, não crie novos!
+    IMPERATIVO: Use EXATAMENTE o abstract e keywords fornecidos - não modifique uma vírgula!
 
-${attachedFilesText}
-${chartsText}
+    ${attachedFilesText}
+    ${chartsText}
 
-INSTRUÇÕES ABSOLUTAS:
-1. Escreva TUDO em português brasileiro
-2. NÃO use NENHUM placeholder como [inserir algo], [descrever isso], [mencionar aquilo]
-3. Crie conteúdo específico e detalhado para cada seção
-4. Use dados realistas e específicos (invente se necessário)
-5. Use HTML simples com estilos CSS inline (SEM DOCTYPE, html, head ou body)
+    DIRETRIZES FUNDAMENTAIS:
+    ✓ Idioma: Português brasileiro acadêmico formal
+    ✓ Conteúdo: 100% específico e detalhado (ZERO placeholders)
+    ✓ Formato: HTML puro com CSS inline (sem DOCTYPE/html/head/body)
+    ✓ Dados: Realistas e quantitativos (invente números específicos se necessário)
+    ✓ Extensão: Artigo completo com ~2.500 palavras distribuídas pelas seções
 
-REGRAS PARA TAGS MULTIMÍDIA:
-- CHARTS: Use APENAS se includeCharts=true
-- IMAGENS: Use APENAS se há arquivos anexados tipo 'image'
-- Se não há imagens anexadas: JAMAIS crie tags [Imagem: ...]
-- Se não solicitar charts: JAMAIS crie tags [CHART: ...]
-- Para ilustrar sem tags: use descrições textuais detalhadas
+    PROIBIÇÕES ABSOLUTAS:
+    ✗ Placeholders como [inserir], [descrever], [mencionar], [adicionar]
+    ✗ Frases vagas como "diversos estudos mostram" ou "os dados indicam"
+    ✗ Tags HTML estruturais (DOCTYPE, html, head, body)
+    ✗ Múltiplas linhas vazias consecutivas
 
-ESTRUTURA OBRIGATÓRIA:
-1. Título principal
-2. Abstract (USE EXATAMENTE o abstract fornecido: "${params.abstract}")
-3. Keywords (USE EXATAMENTE as keywords fornecidas: "${params.keywords}")
-4. Introdução (300 palavras sobre contexto e objetivos específicos)
-5. Revisão da Literatura (400 palavras com estudos relacionados)
-6. Metodologia (350 palavras descrevendo processo específico)
-7. Resultados (400 palavras com dados concretos)
-8. Discussão (350 palavras interpretando resultados)
-9. Conclusão (250 palavras com síntese e perspectivas)
-10. Referências (5-8 referências em formato ABNT)
+    REGRAS PARA ELEMENTOS VISUAIS:
+    ${params.includeCharts ? 
+    `🔹 GRÁFICOS OBRIGATÓRIOS: Inclua ${params.chartIds?.length || 3} gráficos
+    ${params.chartIds ? 
+      `• Use SOMENTE estes IDs: ${params.chartIds.join(', ')}
+    • ESPAÇAMENTO OBRIGATÓRIO: <div style="margin: 40px 0;">[CHART:id]</div>
+    • PADRÃO: Parágrafo contexto + Gráfico + Parágrafo análise
+    • Distribua nas seções: ${params.chartIds.map((id, i) => `[CHART:${id}] na ${i === 0 ? 'Metodologia' : i === 1 ? 'Resultados' : 'Discussão'}`).join(', ')}
+    • DISTÂNCIA MÍNIMA: 3 parágrafos entre gráficos consecutivos
+    ${params.attachedCharts?.length ? 
+      `• CONTEÚDO DOS GRÁFICOS: Consulte as informações detalhadas fornecidas
+    • SEMPRE descreva o que cada gráfico mostra baseado na descrição fornecida
+    • Exemplo: "O [CHART:${params.attachedCharts[0]?.id}] apresenta ${params.attachedCharts[0]?.description.toLowerCase()}"` : ''}` :
+      `• Sugestão de distribuição:
+      - [CHART:metodologia_processo] na Metodologia
+      - [CHART:resultados_principal] nos Resultados
+      - [CHART:discussao_comparativa] na Discussão`
+    }` : 
+    `🔹 GRÁFICOS: Não solicitados - NÃO criar tags [CHART:]`
+    }
 
-FORMATAÇÃO HTML E ESPAÇAMENTO:
-- Use estilos CSS inline profissionais
-- Cores: títulos em #2563eb, texto em #1f2937
-- Destaque palavras importantes com background amarelo
-- Crie seções bem estruturadas
-- IMPORTANTE: Comece DIRETAMENTE com o conteúdo (título principal)
-- Use espaçamentos moderados entre seções (margin: 20px 0)
-- Evite múltiplas linhas vazias consecutivas
-- NÃO use DOCTYPE, html, head, body - apenas conteúdo HTML puro
+    ${params.attachedFiles?.some(f => f.type === 'image') ? 
+    `🔹 IMAGENS: Use ${params.attachedFiles.filter(f => f.type === 'image').map(f => `[Imagem: ${f.fileName}]`).join(', ')}
+    ${params.attachedFiles.filter(f => f.type === 'image').length ? 
+      `• CONTEÚDO DAS IMAGENS: Integre baseado nas descrições fornecidas
+    • ESPAÇAMENTO OBRIGATÓRIO: <div style="margin: 30px 0;">[Imagem: nome]</div>
+    • SEMPRE contextualize o que cada imagem mostra
+    • PADRÃO: Parágrafo antes + Imagem + Parágrafo depois
+    • DISTRIBUIÇÃO: Máximo 1 imagem por seção de 500+ palavras
+    • Exemplo: "A [Imagem: ${params.attachedFiles.filter(f => f.type === 'image')[0]?.fileName}] ilustra ${params.attachedFiles.filter(f => f.type === 'image')[0]?.description || 'aspectos relevantes da pesquisa'}"` : ''}` :
+    `🔹 IMAGENS: Não anexadas - NÃO criar tags [Imagem:]`
+    }
 
-${params.includeCharts ? `
-GRÁFICOS OBRIGATÓRIOS:
-- Inclua exatamente ${params.chartIds?.length || 3} tags [CHART:id] usando APENAS os IDs fornecidos
-${params.chartIds ? 
-  `- USAR EXATAMENTE ESTES IDs:
-${params.chartIds.map((id, index) => `  * [CHART:${id}] - ${index === 0 ? 'na seção Metodologia' : index === 1 ? 'na seção Resultados' : 'na seção Discussão'}`).join('\n')}` :
-  `- [CHART:metodologia_processo] na seção Metodologia
-- [CHART:resultados_dados] na seção Resultados  
-- [CHART:analise_final] na seção Discussão`
-}
-- NÃO invente IDs próprios, use APENAS os fornecidos acima
-` : ''}
+    ESTRUTURA E ESPECIFICAÇÕES:
 
-REGRA CRÍTICA: Substitua qualquer impulso de usar [inserir algo] por texto real e específico. Exemplo:
-- Em vez de "[inserir descrição]" → "Os dados demonstram um aumento de 23% na eficiência"
-- Em vez de "[mencionar limitações]" → "As limitações incluem o tamanho da amostra de 150 participantes"
+    1️⃣ TÍTULO PRINCIPAL
+    • Use <h1> estilizado em azul (#2563eb)
 
-Tanto gráficos quanto imagens ocupam espaço no artigo, então use-os de forma equilibrada e relevante. Se não houver imagens anexadas, NÃO crie tags [Imagem: ...]. Se não houver gráficos solicitados, NÃO crie tags [CHART: ...].
+    2️⃣ AUTORES E AFILIAÇÕES
+    • Liste com instituições específicas
 
-ATENÇÃO ESPECIAL - ABSTRACT E KEYWORDS:
-- No Abstract: Use LITERALMENTE o texto: "${params.abstract}"
-- Nas Keywords: Use LITERALMENTE: "${params.keywords}"
-- NÃO modifique, melhore ou reescreva estes textos
-- Use exatamente como fornecido nas informações obrigatórias
+    3️⃣ ABSTRACT (100-150 palavras)
+    • Use LITERALMENTE: "${params.abstract}"
+    • Formato em caixa destacada
 
-Escreva o artigo completo agora. COMECE DIRETAMENTE com o título principal (h1), sem DOCTYPE, html ou body:
-    `
+    4️⃣ KEYWORDS
+    • Use LITERALMENTE: "${params.keywords}"
+
+    5️⃣ INTRODUÇÃO (400-500 palavras)
+    • Contextualize o problema com dados específicos
+    • Cite estatísticas reais da área
+    • Estabeleça objetivos claros e mensuráveis
+    • Justifique a relevância com números
+
+    6️⃣ REVISÃO DA LITERATURA (500-600 palavras)
+    • Cite 5-8 estudos com autores e anos específicos
+    • Compare metodologias e resultados quantitativos
+    • Identifique lacunas específicas na literatura
+    • Use transições fluidas entre os tópicos
+
+    7️⃣ METODOLOGIA (400-500 palavras)
+    • Descreva população, amostra e critérios específicos
+    • Detalhe instrumentos e procedimentos passo a passo
+    • Especifique análises estatísticas (testes, software, p-valor)
+    • Inclua aspectos éticos e temporais
+
+    8️⃣ RESULTADOS (500-600 palavras)
+    • Apresente dados quantitativos específicos (percentuais, médias)
+    • Organize em subtópicos claros
+    • Relacione com objetivos estabelecidos
+    • Use linguagem objetiva e precisa
+
+    9️⃣ DISCUSSÃO (450-550 palavras)
+    • Compare resultados com literatura citada
+    • Explique implicações práticas e teóricas
+    • Reconheça limitações específicas
+    • Sugira melhorias metodológicas
+
+    🔟 CONCLUSÃO (300-350 palavras)
+    • Sintetize achados principais
+    • Destaque contribuições inovadoras
+    • Proponha pesquisas futuras específicas
+    • Termine com impacto prático
+
+    1️⃣1️⃣ REFERÊNCIAS
+    • 6-10 referências em formato ABNT
+    • Inclua DOIs realistas
+    • Varie tipos: artigos, livros, relatórios
+
+    ESTILO E FORMATAÇÃO HTML:
+    • Títulos principais: color: #2563eb, font-weight: bold
+    • Subtítulos: color: #1f2937, border-bottom com cor azul
+    • Destaques: background amarelo (#fef3c7) para termos-chave
+    • Parágrafos: line-height 1.6, margin adequado
+    • Listas: background cinza claro (#f8fafc), padding
+    • Texto: color #374151, justificado
+
+    ESPAÇAMENTO PARA ELEMENTOS VISUAIS:
+    • IMAGENS: Adicione margin: 30px 0 antes e depois
+    • GRÁFICOS: Adicione margin: 40px 0 antes e depois  
+    • CONTEXTO: Sempre inclua parágrafo explicativo ANTES da imagem/gráfico
+    • ANÁLISE: Sempre inclua parágrafo de análise DEPOIS da imagem/gráfico
+    • DISTRIBUIÇÃO: Máximo 1 elemento visual por seção longa (500+ palavras)
+    • RESPIRAÇÃO: Deixe pelo menos 2-3 parágrafos entre elementos visuais consecutivos
+
+    EXEMPLO DE ESPACIAMENTO CORRETO:
+    <p>Texto introdutório explicando o contexto...</p>
+    
+    <div style="margin: 30px 0;">
+    [Imagem: exemplo.jpg]
+    </div>
+    
+    <p>Análise e interpretação do elemento visual...</p>
+    
+    <p>Continuação do texto com mais 2-3 parágrafos...</p>
+
+    EXEMPLO DE ESPECIFICIDADE OBRIGATÓRIA:
+    ❌ "Os resultados mostraram melhoria significativa"
+    ✅ "Os resultados demonstraram melhoria de 34,7% (p<0,001) na variável X, com desvio padrão de ±2,3"
+
+    ❌ "Diversos autores concordam"
+    ✅ "Silva et al. (2023), Santos (2022) e Oliveira & Costa (2024) convergem quanto à eficácia de 78-85%"
+
+    INICIE AGORA com <h1> - sem preâmbulos ou tags estruturais:`
   }
 
   private static cleanMarkdownCodeBlocks(text: string): string {
@@ -385,10 +546,33 @@ SUPORTE A MULTIMÍDIA (Considere Espaço Visual):
 - IMAGENS: Use APENAS se especificado no contexto: [Imagem: nome_do_arquivo]
 - GRÁFICOS: Use APENAS se especificado no contexto: [CHART:id_fornecido]
 - ESPAÇO VISUAL: Imagens ocupam ~200-500px de altura, gráficos ~300-400px
+- ESPAÇAMENTO OBRIGATÓRIO: 
+  * Imagens: <div style="margin: 30px 0;">[Imagem: nome]</div>
+  * Gráficos: <div style="margin: 40px 0;">[CHART:id]</div>
+- ESTRUTURA PADRÃO:
+  * Parágrafo de contexto (explicando o que será mostrado)
+  * Elemento visual com espaçamento
+  * Parágrafo de análise (interpretando o que foi mostrado)
+- DISTRIBUIÇÃO: Máximo 1 elemento visual por seção, com 2-3 parágrafos entre elementos
 - Quando incluir elementos visuais, reduza proporcionalmente o texto para equilibrar
 - Integre naturalmente sem forçar se não for apropriado para a seção
-- Exemplo: "A metodologia é ilustrada na [Imagem: processo.jpg], que demonstra..."
-- Exemplo: "Os resultados são apresentados no [CHART:dados_principais], evidenciando..."
+- Exemplo de estrutura correta:
+  
+  <p>A metodologia empregada segue etapas específicas...</p>
+  
+  <div style="margin: 30px 0;">
+  [Imagem: processo.jpg]
+  </div>
+  
+  <p>Conforme demonstrado, o processo ilustra...</p>
+  
+  <p>Os resultados apresentados evidenciam...</p>
+  
+  <div style="margin: 40px 0;">
+  [CHART:dados_principais]
+  </div>
+  
+  <p>A análise dos dados revela tendências...</p>
 
 DIRETRIZES:
 - Use linguagem científica formal
