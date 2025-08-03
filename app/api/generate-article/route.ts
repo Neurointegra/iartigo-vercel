@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { GeminiService } from '@/lib/services/gemini.service'
 import { ArticleService } from '@/lib/services/article.service'
+import { processImageTags } from '@/lib/utils/image-processor'
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    console.log('Dados recebidos na API generate-article:', JSON.stringify(body, null, 2))
+    
     const { 
       articleId,
       title, 
@@ -16,8 +19,28 @@ export async function POST(request: NextRequest) {
       authors,
       literatureSuggestions,
       sectionType, // Para gerar seções específicas
-      userId 
+      userId,
+      attachedFiles, // Arquivos enviados pelo usuário
+      includeCharts, // Indicador para gerar gráficos
+      chartIds, // IDs específicos dos gráficos
+      includeTables // Indicador para gerar tabelas
     } = body
+
+    if (attachedFiles && attachedFiles.length > 0) {
+      console.log('Arquivos anexados recebidos:')
+      attachedFiles.forEach((file: any, index: number) => {
+        console.log(`  Arquivo ${index + 1}:`, {
+          name: file.name,
+          fileName: file.fileName,
+          type: file.type,
+          size: file.size
+        })
+      })
+    }
+
+    if (includeCharts && chartIds) {
+      console.log('Chart IDs recebidos:', chartIds)
+    }
 
     if (!title && !sectionType) {
       return NextResponse.json(
@@ -46,15 +69,21 @@ export async function POST(request: NextRequest) {
         methodology,
         targetJournal,
         authors,
-        literatureSuggestions
+        literatureSuggestions,
+        attachedFiles,
+        includeCharts,
+        chartIds,
+        includeTables
       })
     }
+
+    // Processar tags de imagem para buscar arquivos na pasta uploads
+    generatedContent = await processImageTags(generatedContent)
 
     // Se articleId for fornecido, atualizar o artigo existente
     if (articleId) {
       const updatedArticle = await ArticleService.update(articleId, {
-        content: generatedContent,
-        status: 'completed'
+        content: generatedContent
       })
       
       return NextResponse.json({
@@ -68,15 +97,8 @@ export async function POST(request: NextRequest) {
     if (userId) {
       const newArticle = await ArticleService.create({
         title,
-        abstract,
-        keywords,
-        fieldOfStudy,
-        methodology,
-        targetJournal,
         content: generatedContent,
-        status: 'completed',
-        userId,
-        wordCount: generatedContent.split(' ').length
+        userId
       })
 
       return NextResponse.json({

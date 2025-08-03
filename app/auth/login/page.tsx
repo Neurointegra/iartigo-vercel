@@ -104,6 +104,7 @@ export default function LoginPage() {
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required
+                    autoComplete="current-password"
                   />
                   <button
                     type="button"

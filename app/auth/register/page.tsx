@@ -184,6 +184,7 @@ export default function RegisterPage() {
                         onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                         required
                         minLength={8}
+                        autoComplete="new-password"
                       />
                       <button
                         type="button"
@@ -207,6 +208,7 @@ export default function RegisterPage() {
                         value={formData.confirmPassword}
                         onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                         required
+                        autoComplete="new-password"
                       />
                       <button
                         type="button"

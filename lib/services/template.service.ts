@@ -99,10 +99,15 @@ export class TemplateService {
       prisma.template.findMany({
         where: {
           OR: [
-            { name: { contains: query, mode: 'insensitive' } },
-            { description: { contains: query, mode: 'insensitive' } },
-            { category: { contains: query, mode: 'insensitive' } },
-            { fieldOfStudy: { contains: query, mode: 'insensitive' } },
+            { name: { contains: query } },
+            { description: { contains: query } },
+            { category: { contains: query } },
+            { 
+              AND: [
+                { fieldOfStudy: { not: null } },
+                { fieldOfStudy: { contains: query } }
+              ]
+            },
           ],
         },
         skip,
@@ -112,10 +117,15 @@ export class TemplateService {
       prisma.template.count({
         where: {
           OR: [
-            { name: { contains: query, mode: 'insensitive' } },
-            { description: { contains: query, mode: 'insensitive' } },
-            { category: { contains: query, mode: 'insensitive' } },
-            { fieldOfStudy: { contains: query, mode: 'insensitive' } },
+            { name: { contains: query } },
+            { description: { contains: query } },
+            { category: { contains: query } },
+            { 
+              AND: [
+                { fieldOfStudy: { not: null } },
+                { fieldOfStudy: { contains: query } }
+              ]
+            },
           ],
         },
       }),

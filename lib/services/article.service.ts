@@ -16,6 +16,7 @@ export type CreateArticleData = {
   dataCollection?: string
   statisticalAnalysis?: string
   content?: string
+  charts?: any[] // Gráficos gerados
   status?: string
   wordCount?: number
   userId: string
@@ -24,6 +25,7 @@ export type CreateArticleData = {
 export type UpdateArticleData = Partial<Omit<CreateArticleData, 'userId'>> & {
   status?: string
   content?: string
+  charts?: any[] // Gráficos gerados
   wordCount?: number
   qualityScore?: number
   timeSpent?: number
@@ -53,24 +55,55 @@ export type CreateLiteratureData = {
 
 export class ArticleService {
   // Create article
-  static async create(data: CreateArticleData) {
-    // Verificar se o usuário existe
-    const user = await prisma.user.findUnique({
-      where: { id: data.userId }
-    })
-    
-    if (!user) {
-      throw new Error(`User with ID ${data.userId} does not exist`)
+  static async create(data: {
+    title: string;
+    content: string;
+    userId: string;
+    charts?: string | any[];
+  }) {
+    console.log('ArticleService.create - dados de entrada:', {
+      title: data.title,
+      userId: data.userId,
+      hasCharts: !!data.charts,
+      chartsLength: Array.isArray(data.charts) ? data.charts.length : data.charts?.length,
+      contentLength: data.content.length
+    });
+
+    try {
+      // Converter charts para JSON string se for um array
+      const chartsString = Array.isArray(data.charts) 
+        ? JSON.stringify(data.charts) 
+        : data.charts;
+
+      const article = await prisma.article.create({
+        data: {
+          title: data.title,
+          content: data.content,
+          userId: data.userId,
+          ...(chartsString && { charts: chartsString }),
+        },
+      });
+
+      console.log('ArticleService.create - artigo criado:', {
+        id: article.id,
+        title: article.title,
+        userId: article.userId,
+        hasCharts: !!(article as any).charts
+      });
+
+      return article;
+    } catch (error) {
+      console.error('ArticleService.create - erro no banco de dados:', {
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        errorCode: error instanceof Error && 'code' in error ? (error as any).code : null,
+        data: {
+          title: data.title,
+          userId: data.userId,
+          hasCharts: !!data.charts
+        }
+      });
+      throw error;
     }
-    
-    return await prisma.article.create({
-      data,
-      include: {
-        user: true,
-        authors: true,
-        literatureSuggestions: true,
-      },
-    })
   }
 
   // Get article by ID
@@ -91,9 +124,16 @@ export class ArticleService {
 
   // Update article
   static async update(id: string, data: UpdateArticleData) {
+    // Processar gráficos para JSON se existirem
+    const { charts, ...articleData } = data
+    const processedData = {
+      ...articleData,
+      charts: charts ? JSON.stringify(charts) : undefined
+    }
+    
     return await prisma.article.update({
       where: { id },
-      data,
+      data: processedData,
       include: {
         user: true,
         authors: true,
@@ -290,10 +330,10 @@ export class ArticleService {
         where: {
           userId,
           OR: [
-            { title: { contains: query, mode: 'insensitive' } },
-            { abstract: { contains: query, mode: 'insensitive' } },
-            { keywords: { contains: query, mode: 'insensitive' } },
-            { fieldOfStudy: { contains: query, mode: 'insensitive' } },
+            { title: { contains: query } },
+            { abstract: { contains: query } },
+            { keywords: { contains: query } },
+            { fieldOfStudy: { contains: query } },
           ],
         },
         skip,
@@ -314,10 +354,10 @@ export class ArticleService {
         where: {
           userId,
           OR: [
-            { title: { contains: query, mode: 'insensitive' } },
-            { abstract: { contains: query, mode: 'insensitive' } },
-            { keywords: { contains: query, mode: 'insensitive' } },
-            { fieldOfStudy: { contains: query, mode: 'insensitive' } },
+            { title: { contains: query } },
+            { abstract: { contains: query } },
+            { keywords: { contains: query } },
+            { fieldOfStudy: { contains: query } },
           ],
         },
       }),

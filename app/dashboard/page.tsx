@@ -97,7 +97,6 @@ export default function DashboardPage() {
   const [isLoadingLiterature, setIsLoadingLiterature] = useState(false)
   const [generatedArticle, setGeneratedArticle] = useState("")
   const [literatureSuggestions, setLiteratureSuggestions] = useState<LiteratureSuggestion[]>([])
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [recentArticles, setRecentArticles] = useState<RecentArticle[]>([])
   const [quickPrompt, setQuickPrompt] = useState("")
   const [isQuickGenerating, setIsQuickGenerating] = useState(false)
@@ -374,8 +373,13 @@ export default function DashboardPage() {
     }
   }
 
-  // Função para criar um novo artigo
-  const handleCreateNewArticle = async () => {
+  // Função para abrir o gerador avançado de artigos
+  const handleAdvancedGenerator = () => {
+    router.push('/generator')
+  }
+
+  // Função para criar um novo artigo simples (editor tradicional)
+  const handleCreateSimpleArticle = async () => {
     try {
       const response = await fetch('/api/articles', {
         method: 'POST',
@@ -472,9 +476,6 @@ export default function DashboardPage() {
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-4">
-              <Button variant="ghost" size="sm" onClick={() => setSidebarOpen(!sidebarOpen)} className="lg:hidden">
-                <Menu className="h-5 w-5" />
-              </Button>
               <Link href="/" className="flex items-center gap-3">
                 <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
                   <span className="text-white font-bold text-lg">IA</span>
@@ -502,84 +503,9 @@ export default function DashboardPage() {
         </div>
       </header>
 
-      <div className="flex">
-        {/* Sidebar */}
-        <aside
-          className={`${
-            sidebarOpen ? "translate-x-0" : "-translate-x-full"
-          } fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-gray-200 transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-0`}
-        >
-          <div className="flex flex-col h-full pt-16 lg:pt-0">
-            <div className="flex-1 flex flex-col min-h-0 pt-5 pb-4 overflow-y-auto">
-              <div className="flex items-center gap-3 px-4 mb-6">
-                <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center shadow-md">
-                  <span className="text-white font-bold text-sm">IA</span>
-                </div>
-                <span className="text-lg font-bold text-gray-900">iArtigo</span>
-              </div>
-              <nav className="mt-5 flex-1 px-2 space-y-1">
-                <button
-                  onClick={handleCreateNewArticle}
-                  className="bg-blue-50 text-blue-700 group flex items-center px-2 py-2 text-sm font-medium rounded-md w-full text-left hover:bg-blue-100"
-                >
-                  <Sparkles className="text-blue-500 mr-3 h-5 w-5" />
-                  Novo Artigo
-                </button>
-                <a
-                  href="#"
-                  className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
-                >
-                  <History className="text-gray-400 mr-3 h-5 w-5" />
-                  Meus Artigos
-                </a>
-                <a
-                  href="#"
-                  className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
-                >
-                  <Book className="text-gray-400 mr-3 h-5 w-5" />
-                  Literatura
-                </a>
-                <a
-                  href="#"
-                  className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
-                >
-                  <BarChart3 className="text-gray-400 mr-3 h-5 w-5" />
-                  Estatísticas
-                </a>
-                <a
-                  href="#"
-                  className="text-gray-600 hover:bg-gray-50 hover:text-gray-900 group flex items-center px-2 py-2 text-sm font-medium rounded-md"
-                >
-                  <Settings className="text-gray-400 mr-3 h-5 w-5" />
-                  Configurações
-                </a>
-              </nav>
-            </div>
-            <div className="flex-shrink-0 flex border-t border-gray-200 p-4">
-              <div className="flex-shrink-0 w-full group block">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center">
-                    <Avatar className="h-8 w-8">
-                      <AvatarImage src="/placeholder.svg" />
-                      <AvatarFallback>{user?.name?.split(' ').map(n => n[0]).join('') || 'U'}</AvatarFallback>
-                    </Avatar>
-                    <div className="ml-3">
-                      <p className="text-sm font-medium text-gray-700 group-hover:text-gray-900">{user?.name || "Usuário"}</p>
-                      <p className="text-xs font-medium text-gray-500 group-hover:text-gray-700">{user?.email}</p>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="sm" onClick={handleLogout}>
-                    <LogOut className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
-            </div>
-          </div>
-        </aside>
-
-        {/* Main Content */}
-        <main className="flex-1 lg:pl-0">
-          <div className="py-6">
+      {/* Main Content */}
+      <main className="flex-1">
+        <div className="py-6">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
               {/* Dashboard Header */}
               <div className="mb-8">
@@ -726,18 +652,18 @@ export default function DashboardPage() {
                         <Sparkles className="h-5 w-5" />
                         Ações Rápidas
                       </CardTitle>
-                      <CardDescription>Comece um novo artigo ou continue um existente</CardDescription>
+                      <CardDescription>Comece a criação de um artigo científico com IA</CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <Button 
                           className="h-24 flex-col gap-2" 
                           size="lg"
-                          onClick={handleCreateNewArticle}
+                          onClick={handleAdvancedGenerator}
                         >
                           <Plus className="h-6 w-6" />
-                          <span>Novo Artigo</span>
-                          <span className="text-xs opacity-75">Começar do zero</span>
+                          <span>Artigo Avançado</span>
+                          <span className="text-xs opacity-75">IA para gerar artigos</span>
                         </Button>
                         <Button variant="outline" className="h-24 flex-col gap-2" size="lg">
                           <Search className="h-6 w-6" />
@@ -745,26 +671,31 @@ export default function DashboardPage() {
                           <span className="text-xs opacity-75">Encontrar referências</span>
                         </Button>
                         <Button variant="outline" className="h-24 flex-col gap-2" size="lg">
-                          <FileText className="h-6 w-6" />
-                          <span>Templates</span>
-                          <span className="text-xs opacity-75">Usar modelo pronto</span>
-                        </Button>
-                        <Button variant="outline" className="h-24 flex-col gap-2" size="lg">
                           <BarChart3 className="h-6 w-6" />
                           <span>Análise de Dados</span>
                           <span className="text-xs opacity-75">Gerar gráficos</span>
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          className="h-24 flex-col gap-2" 
+                          size="lg"
+                          onClick={handleCreateSimpleArticle}
+                        >
+                          <FileText className="h-6 w-6" />
+                          <span>Editor Simples</span>
+                          <span className="text-xs opacity-75">Começar do zero</span>
                         </Button>
                       </div>
                     </CardContent>
                   </Card>
 
-                  {/* Recent Articles */}
+                  {/* Articles */}
                   <Card className="mt-8">
                     <CardHeader>
                       <CardTitle className="flex items-center justify-between">
                         <span className="flex items-center gap-2">
                           <History className="h-5 w-5" />
-                          Artigos Recentes
+                          Artigos
                         </span>
                         <Button variant="ghost" size="sm">
                           Ver todos
@@ -842,31 +773,47 @@ export default function DashboardPage() {
                   </Card>
                 </div>
 
-                {/* Sidebar Info */}
+                {/* Navigation Menu */}
                 <div className="space-y-6">
-                  {/* Tips Card */}
+                  {/* Menu de Navegação */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
-                        <HelpCircle className="h-5 w-5" />
-                        Dicas de Hoje
+                        <Menu className="h-5 w-5" />
+                        Menu de Navegação
                       </CardTitle>
                     </CardHeader>
                     <CardContent>
-                      <div className="space-y-4">
-                        <div className="p-3 bg-blue-50 rounded-lg">
-                          <h4 className="font-medium text-blue-900 mb-1">Palavras-chave eficazes</h4>
-                          <p className="text-sm text-blue-700">
-                            Use 3-5 palavras-chave específicas para obter melhores sugestões de literatura.
-                          </p>
-                        </div>
-                        <div className="p-3 bg-green-50 rounded-lg">
-                          <h4 className="font-medium text-green-900 mb-1">Formatação automática</h4>
-                          <p className="text-sm text-green-700">
-                            Escolha a revista alvo antes de gerar para formatação otimizada.
-                          </p>
-                        </div>
-                      </div>
+                      <nav className="space-y-2">
+                        <button
+                          onClick={handleAdvancedGenerator}
+                          className="w-full bg-blue-50 text-blue-700 group flex items-center px-3 py-2 text-sm font-medium rounded-md hover:bg-blue-100"
+                        >
+                          <Sparkles className="text-blue-500 mr-3 h-5 w-5" />
+                          Artigo Avançado
+                        </button>
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                        >
+                          <History className="text-gray-400 mr-3 h-5 w-5" />
+                          Meus Artigos
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                        >
+                          <Book className="text-gray-400 mr-3 h-5 w-5" />
+                          Literatura
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="w-full justify-start text-gray-600 hover:bg-gray-50 hover:text-gray-900"
+                        >
+                          <BarChart3 className="text-gray-400 mr-3 h-5 w-5" />
+                          Estatísticas
+                        </Button>
+                      </nav>
                     </CardContent>
                   </Card>
 
@@ -880,6 +827,16 @@ export default function DashboardPage() {
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-3">
+                        <div className="flex items-center gap-3">
+                          <Avatar className="h-10 w-10">
+                            <AvatarImage src="/placeholder.svg" />
+                            <AvatarFallback>{user?.name?.split(' ').map(n => n[0]).join('') || 'U'}</AvatarFallback>
+                          </Avatar>
+                          <div>
+                            <p className="text-sm font-medium text-gray-900">{user?.name || "Usuário"}</p>
+                            <p className="text-xs text-gray-500">{user?.email}</p>
+                          </div>
+                        </div>
                         <div className="flex items-center justify-between">
                           <span className="text-sm text-gray-600">Plano atual</span>
                           <Badge>Básico</Badge>
@@ -891,6 +848,15 @@ export default function DashboardPage() {
                         <Button variant="outline" size="sm" className="w-full">
                           <CreditCard className="h-4 w-4 mr-2" />
                           Gerenciar Plano
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full text-red-600 hover:text-red-700 hover:bg-red-50"
+                          onClick={handleLogout}
+                        >
+                          <LogOut className="h-4 w-4 mr-2" />
+                          Sair
                         </Button>
                       </div>
                     </CardContent>
@@ -926,12 +892,6 @@ export default function DashboardPage() {
             </div>
           </div>
         </main>
-      </div>
-
-      {/* Mobile sidebar overlay */}
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-20 bg-black bg-opacity-50 lg:hidden" onClick={() => setSidebarOpen(false)} />
-      )}
 
       {/* Dialog de confirmação de deleção */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>

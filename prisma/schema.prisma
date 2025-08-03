@@ -50,6 +50,7 @@ model Article {
   statisticalAnalysis   String?
   status                String                 @default("draft")
   content               String?
+  charts                String?                // JSON string dos gráficos anexados
   wordCount             Int                    @default(0)
   qualityScore          Float?
   timeSpent             Int                    @default(0)
