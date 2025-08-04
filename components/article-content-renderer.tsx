@@ -96,51 +96,27 @@ export default function ArticleContentRenderer({
           });
         }
 
-        // Processar tags de gráficos convertidos em imagens
-        console.log('📊 Processando tags de gráficos como imagens...')
+        // Processar gráficos substituindo [CHART:id] por HTML direto
+        console.log('📊 Substituindo tags de gráficos por HTML direto...')
         attachedCharts.forEach((chart) => {
-          const chartImageName = chartImages[chart.id]
-          if (chartImageName) {
-            // Substituir tags [CHART:id] por tags [Imagem: chart_id.svg]
+          const chartHtml = chartImages[chart.id]
+          if (chartHtml) {
+            // Substituir tags [CHART:id] por HTML direto com <img>
             const chartTagPattern = new RegExp(`\\[CHART:${chart.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g')
-            const imageTagReplacement = `[Imagem: ${chartImageName}]`
-            htmlContent = htmlContent.replace(chartTagPattern, imageTagReplacement)
-            console.log(`🔄 Convertido [CHART:${chart.id}] para [Imagem: ${chartImageName}]`)
+            htmlContent = htmlContent.replace(chartTagPattern, chartHtml)
+            console.log(`🔄 Convertido [CHART:${chart.id}] para HTML direto`)
           }
         })
 
-        // Processar novamente as imagens para incluir os gráficos convertidos
+        // Processar imagens normais (não gráficos)
         htmlContent = await processImageTagsClient(htmlContent)
-        console.log('📸 Tags de gráfico-imagem processadas')
+        console.log('📸 Tags de imagem processadas')
 
-        // Dividir conteúdo para renderização
-        const parts = htmlContent.split(/(\[CHART:[^\]]+\])/)
+        // Dividir conteúdo para renderização (não há mais tags [CHART:] para processar)
+        const parts = [htmlContent] // Agora é só uma parte com HTML completo
         
         const renderedParts = parts.map((part, index) => {
-          // Verificar se ainda há referências de gráfico não processadas
-          const chartMatch = part.match(/\[CHART:([^\]]+)\]/)
-          if (chartMatch) {
-            const chartId = chartMatch[1]
-            const chart = attachedCharts.find(c => c.id === chartId)
-            if (chart) {
-              console.log(`⚠️ Gráfico não convertido encontrado: ${chartId} - Será exibido como placeholder`)
-              return (
-                <div key={index} className="my-6 p-4 border-2 border-dashed border-gray-300 rounded-lg text-center bg-gray-50">
-                  <div className="text-gray-600">
-                    <div className="text-lg font-semibold mb-2">📊 {chart.name}</div>
-                    <div className="text-sm">{chart.description}</div>
-                    <div className="text-xs mt-2 text-gray-400">
-                      Gráfico {chart.type} será convertido em imagem
-                    </div>
-                  </div>
-                </div>
-              )
-            } else {
-              console.warn(`⚠️ Gráfico não encontrado: ${chartId}`)
-            }
-          }
-
-          // Retornar texto normal (incluindo HTML de imagens inline)
+          // Como não há mais tags [CHART:], renderizar HTML diretamente
           return (
             <div 
               key={index} 

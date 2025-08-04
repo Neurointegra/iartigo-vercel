@@ -179,15 +179,177 @@ export class GeminiService {
     return result
   }
 
-  static async generateChartImage(
-    chartType: 'bar' | 'line' | 'pie' | 'scatter',
-    data: any,
-    title: string,
-    description: string,
-    context: string = ""
-  ): Promise<string> {
-    const startTime = Date.now()
-    console.log(`📊 Gerando imagem de gráfico: ${title} (${chartType})`)
+  /**
+   * Analisa dados fornecidos pelo usuário e gera informações para gráficos
+   */
+  static async analyzeDataForCharts(
+    dataContent: string,
+    context: string = "",
+    fileName: string = ""
+  ): Promise<{
+    success: boolean
+    charts: Array<{
+      id: string
+      name: string
+      type: 'bar' | 'line' | 'pie' | 'scatter'
+      data: any
+      description: string
+      analysisContext: string
+    }>
+    error?: string
+  }> {
+    console.log('📊 Iniciando análise de dados para geração de gráficos...')
+    console.log(`📄 Arquivo: ${fileName}`)
+    console.log(`📝 Contexto: ${context}`)
+    console.log(`📋 Tamanho dos dados: ${dataContent.length} caracteres`)
+
+    try {
+      const result = await this.withRetry(async () => {
+        const model = genAI.getGenerativeModel({ 
+          model: 'gemini-2.0-flash-exp',
+          generationConfig: {
+            temperature: 0.3,
+            topP: 0.8,
+            topK: 20,
+            maxOutputTokens: 2048,
+            responseMimeType: "application/json",
+          }
+        })
+
+        const analysisPrompt = `
+Você é um especialista em análise de dados e visualização. Analise os dados fornecidos e identifique os melhores gráficos para representar as informações.
+
+DADOS FORNECIDOS:
+\`\`\`
+${dataContent.substring(0, 3000)}${dataContent.length > 3000 ? '\n...(dados truncados)' : ''}
+\`\`\`
+
+ARQUIVO: ${fileName}
+CONTEXTO: ${context || 'Artigo científico'}
+
+INSTRUÇÕES:
+1. Analise os dados e identifique padrões, tendências e relações importantes
+2. Sugira 2-4 gráficos diferentes que melhor representem os dados
+3. Para cada gráfico, extraia dados específicos e escolha o tipo mais adequado
+4. Gere IDs únicos e descritivos para cada gráfico
+5. Forneça contexto analítico para cada visualização
+
+TIPOS DE GRÁFICO DISPONÍVEIS:
+- "bar": Para comparações entre categorias
+- "line": Para tendências ao longo do tempo ou sequências
+- "pie": Para distribuições e proporções (máximo 8 categorias)
+- "scatter": Para correlações entre duas variáveis
+
+FORMATO DE RESPOSTA (JSON válido):
+{
+  "charts": [
+    {
+      "id": "id_unico_descritivo",
+      "name": "Nome Descritivo do Gráfico",
+      "type": "bar|line|pie|scatter",
+      "data": {
+        "labels": ["categoria1", "categoria2", ...],
+        "values": [valor1, valor2, ...],
+        "datasets": [opcional para múltiplas séries]
+      },
+      "description": "Descrição detalhada do que o gráfico mostra",
+      "analysisContext": "Contexto analítico e insights dos dados"
+    }
+  ]
+}
+
+REGRAS IMPORTANTES:
+- Use dados REAIS extraídos do conteúdo fornecido
+- IDs devem ser únicos e descritivos (ex: "vendas_trimestre", "distribuicao_idade")
+- Dados devem ser numéricos válidos
+- Máximo 4 gráficos por análise
+- Descrições devem ser específicas e informativas
+- analysisContext deve explicar insights e padrões encontrados
+
+EXEMPLOS DE DADOS VÁLIDOS:
+Para bar/line: {"labels": ["Jan", "Feb", "Mar"], "values": [100, 150, 120]}
+Para pie: {"labels": ["Categoria A", "Categoria B"], "values": [30, 70]}
+Para scatter: {"data": [{"x": 10, "y": 20}, {"x": 15, "y": 25}]}
+        `
+
+        const result = await model.generateContent(analysisPrompt)
+        const response = await result.response
+        const text = response.text().trim()
+
+        // Tentar extrair JSON da resposta
+        let jsonData
+        try {
+          // Procurar por JSON válido na resposta
+          const jsonMatch = text.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            jsonData = JSON.parse(jsonMatch[0])
+          } else {
+            jsonData = JSON.parse(text)
+          }
+        } catch (parseError) {
+          console.error('❌ Erro ao fazer parse do JSON:', parseError)
+          console.log('📄 Resposta da IA:', text)
+          throw new Error('Resposta da IA não é um JSON válido')
+        }
+
+        // Validar estrutura
+        if (!jsonData.charts || !Array.isArray(jsonData.charts)) {
+          throw new Error('Estrutura de resposta inválida - charts não encontrado')
+        }
+
+        // Validar cada gráfico
+        const validCharts = jsonData.charts.filter((chart: any) => {
+          const isValid = chart.id && chart.name && chart.type && chart.data && chart.description
+          if (!isValid) {
+            console.warn('⚠️ Gráfico inválido ignorado:', chart)
+          }
+          return isValid
+        })
+
+        if (validCharts.length === 0) {
+          throw new Error('Nenhum gráfico válido foi gerado pela análise')
+        }
+
+        console.log(`✅ Análise concluída: ${validCharts.length} gráficos identificados`)
+        return { charts: validCharts }
+
+      }, 2, 2000)
+
+      return {
+        success: true,
+        charts: result.charts
+      }
+
+    } catch (error) {
+      console.error('❌ Erro na análise de dados:', error)
+      return {
+        success: false,
+        charts: [],
+        error: error instanceof Error ? error.message : 'Erro desconhecido na análise de dados'
+      }
+    }
+  }
+
+  /**
+   * Gera SVG baseado na análise de dados da IA
+   */
+  static async generateDataDrivenSVG(
+    chart: {
+      id: string
+      name: string
+      type: 'bar' | 'line' | 'pie' | 'scatter'
+      data: any
+      description: string
+      analysisContext: string
+    },
+    width: number = 800,
+    height: number = 600
+  ): Promise<{
+    success: boolean
+    svgContent?: string
+    error?: string
+  }> {
+    console.log(`🎨 Gerando SVG baseado em dados para: ${chart.id}`)
 
     try {
       const result = await this.withRetry(async () => {
@@ -196,51 +358,411 @@ export class GeminiService {
           generationConfig: {
             temperature: 0.1,
             topP: 0.8,
-            topK: 20,
-            maxOutputTokens: 1024,
+            topK: 10,
+            maxOutputTokens: 3000,
             responseMimeType: "text/plain",
           }
         })
 
-        // Preparar dados para visualização
-        const dataString = JSON.stringify(data, null, 2)
-        
-        const prompt = `
-Crie uma descrição detalhada de como seria um gráfico ${chartType === 'bar' ? 'de barras' : chartType === 'line' ? 'de linha' : chartType === 'pie' ? 'de pizza' : 'de dispersão'} profissional baseado nos seguintes dados:
+        const svgPrompt = `
+Você é um especialista em SVG e visualização de dados. Gere um gráfico SVG profissional baseado nos dados analisados.
 
-TÍTULO: ${title}
-DESCRIÇÃO: ${description}
-CONTEXTO: ${context || 'Artigo científico'}
+INFORMAÇÕES DO GRÁFICO:
+- ID: ${chart.id}
+- Nome: ${chart.name}
+- Tipo: ${chart.type}
+- Descrição: ${chart.description}
+- Contexto: ${chart.analysisContext}
 
 DADOS:
-${dataString}
+${JSON.stringify(chart.data, null, 2)}
 
-INSTRUÇÕES:
-1. Analise os dados fornecidos
-2. Descreva como seria o gráfico visualmente
-3. Inclua cores apropriadas para um artigo científico
-4. Mencione eixos, legendas e elementos visuais importantes
-5. Sugira layout profissional e acadêmico
-6. Limite: 3-4 frases descritivas e precisas
+ESPECIFICAÇÕES TÉCNICAS:
+- Dimensões: ${width}x${height}
+- Fundo: Branco (#FFFFFF)
+- Cores: Paleta profissional (#2563EB, #059669, #DC2626, #F59E0B, #7C3AED)
+- Fonte: Arial, sans-serif
+- Margens: 60px (topo/lateral), 80px (inferior)
+
+INSTRUÇÕES ESPECÍFICAS POR TIPO:
+
+GRÁFICO DE BARRAS (bar):
+- Barras verticais com espaçamento adequado
+- Eixo X: labels das categorias
+- Eixo Y: escala dos valores
+- Grid horizontal discreto
+- Valores no topo das barras
+
+GRÁFICO DE LINHA (line):
+- Linha contínua com pontos marcados
+- Eixo X: sequência ou tempo
+- Eixo Y: escala dos valores
+- Grid horizontal e vertical discreto
+- Pontos destacados
+
+GRÁFICO DE PIZZA (pie):
+- Fatias proporcionais aos valores
+- Cores alternadas da paleta
+- Labels externos com linhas de conexão
+- Percentuais nas fatias ou labels
+- Legenda lateral
+
+GRÁFICO DE DISPERSÃO (scatter):
+- Pontos plotados nas coordenadas X,Y
+- Eixos com escalas apropriadas
+- Grid discreto
+- Pontos com destaque visual
+
+ELEMENTOS OBRIGATÓRIOS:
+1. Título centralizado no topo
+2. Eixos com labels descritivos
+3. Escala adequada aos dados
+4. Grid de fundo discreto
+5. Legenda quando necessário
+6. Cores consistentes e profissionais
 
 FORMATO DE RESPOSTA:
-Forneça apenas a descrição visual do gráfico, sem comentários adicionais.
+Retorne APENAS o código SVG completo, sem comentários ou explicações.
+Comece com <svg> e termine com </svg>.
 
-Exemplo: "Gráfico de barras com 5 categorias no eixo X (A, B, C, D, E) e valores no eixo Y variando de 0 a 100. Barras azuis com altura proporcional aos valores (25, 45, 70, 85, 60). Grid suave, título centralizado e legenda clara."
+EXEMPLO DE ESTRUTURA:
+<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+  <!-- Fundo -->
+  <rect width="100%" height="100%" fill="#FFFFFF"/>
+  
+  <!-- Título -->
+  <text x="${width/2}" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#1F2937">
+    ${chart.name}
+  </text>
+  
+  <!-- Seus elementos específicos do gráfico aqui -->
+  
+</svg>
         `
 
-        const result = await model.generateContent(prompt)
+        const result = await model.generateContent(svgPrompt)
         const response = await result.response
-        return response.text().trim()
-      }, 2, 1000)
+        let svgContent = response.text().trim()
+
+        // Limpar possíveis markdown ou prefixos
+        if (svgContent.includes('```')) {
+          const svgMatch = svgContent.match(/```(?:svg)?\s*\n?([\s\S]*?)\n?```/)
+          if (svgMatch) {
+            svgContent = svgMatch[1].trim()
+          }
+        }
+
+        // Verificar se é SVG válido
+        if (!svgContent.startsWith('<svg') || !svgContent.endsWith('</svg>')) {
+          throw new Error('SVG gerado não é válido')
+        }
+
+        console.log(`✅ SVG gerado para ${chart.id}: ${svgContent.length} caracteres`)
+        return { svgContent }
+
+      }, 2, 1500)
+
+      return {
+        success: true,
+        svgContent: result.svgContent
+      }
+
+    } catch (error) {
+      console.error(`❌ Erro na geração de SVG para ${chart.id}:`, error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido na geração de SVG'
+      }
+    }
+  }
+
+  /**
+   * Gera imagens usando o Gemini AI com suporte a geração de imagens
+   * Utiliza o modelo gemini-2.0-flash-preview-image-generation
+   */
+  static async generateImage(
+    prompt: string,
+    options: {
+      width?: number
+      height?: number
+      format?: 'png' | 'jpg' | 'svg'
+      context?: string
+    } = {}
+  ): Promise<{
+    success: boolean
+    imageUrl?: string
+    base64Data?: string
+    error?: string
+    description?: string
+  }> {
+    const startTime = Date.now()
+    console.log('🎨 Iniciando geração de imagem com Gemini AI...')
+    console.log(`📝 Prompt: ${prompt.substring(0, 100)}...`)
+
+    try {
+      // Verificar se a API key está configurada
+      if (!process.env.GEMINI_API_KEY) {
+        console.warn('⚠️ GEMINI_API_KEY não configurada')
+        return {
+          success: false,
+          error: 'API key do Gemini não configurada',
+          description: 'Configure GEMINI_API_KEY no arquivo .env'
+        }
+      }
+
+      // Configurar prompt otimizado para geração de imagem
+      const {
+        width = 800,
+        height = 600,
+        format = 'png',
+        context = 'artigo científico'
+      } = options
+
+      const enhancedPrompt = `
+Generate a professional chart/graph image with these specifications:
+
+DESCRIPTION: ${prompt}
+
+TECHNICAL SPECIFICATIONS:
+- Dimensions: ${width}x${height} pixels
+- Format: ${format.toUpperCase()}
+- Context: ${context}
+- Quality: High resolution, professional
+
+VISUAL REQUIREMENTS:
+- White or neutral background
+- Professional color scheme
+- Clear, readable text
+- Balanced composition
+- Suitable for ${context}
+
+Create the image following these exact specifications.
+      `
+
+      // NOVA ABORDAGEM: Tentar método alternativo para geração de imagem
+      const result = await this.withRetry(async () => {
+        try {
+          console.log('🤖 Tentando gerar imagem com modelo experimental (nova abordagem)...')
+          
+          // Tentar método mais simples sem configuração extra
+          const imageModel = genAI.getGenerativeModel({ 
+            model: 'gemini-2.0-flash-preview-image-generation'
+          })
+
+          // Usar prompt mais direto
+          const imageResult = await imageModel.generateContent([
+            {
+              text: enhancedPrompt
+            }
+          ])
+          
+          console.log('🖼️ Resultado da geração de imagem:', imageResult)
+          const imageResponse = imageResult.response
+
+          // Verificar diferentes estruturas de resposta
+          if (imageResponse.candidates && imageResponse.candidates[0]) {
+            const candidate = imageResponse.candidates[0]
+            
+            // Verificar estrutura de dados da imagem
+            if (candidate.content && candidate.content.parts) {
+              for (const part of candidate.content.parts) {
+                // Procurar dados inline (estrutura padrão)
+                if (part.inlineData && part.inlineData.data) {
+                  console.log('✅ Imagem gerada com sucesso!')
+                  
+                  return {
+                    success: true,
+                    base64Data: part.inlineData.data,
+                    imageUrl: `data:${part.inlineData.mimeType || 'image/png'};base64,${part.inlineData.data}`,
+                    description: `Imagem gerada: ${prompt.substring(0, 50)}...`
+                  }
+                }
+              }
+            }
+          }
+
+          // Se chegou até aqui, não encontrou dados de imagem
+          console.log('⚠️ Resposta não contém dados de imagem válidos')
+          console.log('📋 Estrutura da resposta:', JSON.stringify(imageResponse, null, 2))
+          
+          throw new Error('Modelo não retornou dados de imagem válidos')
+
+        } catch (experimentalError) {
+          console.log('❌ Erro no modelo experimental:', experimentalError)
+          console.log('⚠️ Modelo experimental falhou, usando fallback de descrição...')
+          
+          // Fallback: Gerar descrição detalhada para uso com SVG
+          const textModel = genAI.getGenerativeModel({ 
+            model: 'gemini-2.0-flash-exp',
+            generationConfig: {
+              temperature: 0.3,
+              topP: 0.9,
+              topK: 20,
+              maxOutputTokens: 1024,
+              responseMimeType: "text/plain",
+            }
+          })
+
+          const fallbackPrompt = `
+Como especialista em visualização de dados, descreva exatamente como criar um gráfico/diagrama para:
+
+SOLICITAÇÃO: ${prompt}
+DIMENSÕES: ${width}x${height}
+CONTEXTO: ${context}
+
+Forneça uma descrição TÉCNICA e ESPECÍFICA incluindo:
+1. Tipo de gráfico (barra, linha, pizza, dispersão)
+2. Dados específicos (valores, categorias, percentuais)
+3. Cores exatas (códigos hex)
+4. Layout e posicionamento
+5. Texto e legendas
+
+FORMATO DE RESPOSTA:
+Descrição técnica detalhada que permita recriar o gráfico exatamente.
+
+Exemplo: "Gráfico de barras com 4 categorias (A: 25%, B: 45%, C: 70%, D: 55%). Barras azuis #2563EB, fundo branco, eixo Y 0-100%, título 'Resultados' centralizado, grid horizontal cinza #E5E7EB."
+          `
+
+          const fallbackResult = await textModel.generateContent(fallbackPrompt)
+          const fallbackResponse = await fallbackResult.response
+          const description = fallbackResponse.text().trim()
+
+          return {
+            success: false,
+            error: 'Geração de imagem AI não disponível - usando descrição para SVG',
+            description: description
+          }
+        }
+      }, 2, 1500)
 
       const duration = Date.now() - startTime
-      console.log(`✅ Descrição de gráfico gerada em ${duration}ms`)
+      console.log(`✅ Processamento de imagem concluído em ${duration}ms`)
       
       return result
+
     } catch (error) {
-      console.error('❌ Erro ao gerar descrição do gráfico:', error)
-      return `Gráfico ${chartType} mostrando ${description.toLowerCase()}`
+      const duration = Date.now() - startTime
+      console.error('❌ Erro na geração de imagem:', error)
+      console.log(`⏱️ Tentativa falhou após ${duration}ms`)
+      
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido na geração de imagem',
+        description: 'Não foi possível gerar a imagem solicitada. Verifique a configuração da API ou tente novamente.'
+      }
+    }
+  }
+
+  /**
+   * Salva uma imagem gerada na pasta uploads
+   */
+  static async saveGeneratedImage(
+    base64Data: string,
+    filename: string,
+    mimeType: string = 'image/png'
+  ): Promise<{
+    success: boolean
+    filePath?: string
+    publicUrl?: string
+    error?: string
+  }> {
+    try {
+      const fs = require('fs').promises
+      const path = require('path')
+      
+      // Determinar extensão baseada no mimeType
+      const extension = mimeType.includes('jpeg') ? 'jpg' : 
+                      mimeType.includes('svg') ? 'svg' : 'png'
+      
+      // Gerar nome único se não especificado
+      const timestamp = Date.now()
+      const finalFilename = filename.includes('.') ? filename : `${filename}_${timestamp}.${extension}`
+      
+      // Caminhos
+      const uploadsDir = path.join(process.cwd(), 'public', 'uploads')
+      const filePath = path.join(uploadsDir, finalFilename)
+      const publicUrl = `/uploads/${finalFilename}`
+      
+      // Garantir que o diretório existe
+      await fs.mkdir(uploadsDir, { recursive: true })
+      
+      // Converter base64 para buffer
+      const imageBuffer = Buffer.from(base64Data, 'base64')
+      
+      // Salvar arquivo
+      await fs.writeFile(filePath, imageBuffer)
+      
+      console.log(`✅ Imagem salva: ${publicUrl}`)
+      
+      return {
+        success: true,
+        filePath,
+        publicUrl
+      }
+      
+    } catch (error) {
+      console.error('❌ Erro ao salvar imagem:', error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido ao salvar imagem'
+      }
+    }
+  }
+
+  /**
+   * Gera e salva uma imagem de gráfico/diagrama
+   */
+  static async generateAndSaveImage(
+    prompt: string,
+    filename: string,
+    options: {
+      width?: number
+      height?: number
+      format?: 'png' | 'jpg' | 'svg'
+      context?: string
+    } = {}
+  ): Promise<{
+    success: boolean
+    imageUrl?: string
+    publicUrl?: string
+    filePath?: string
+    error?: string
+    description?: string
+  }> {
+    console.log(`🎨 Gerando e salvando imagem: ${filename}`)
+    
+    // Gerar imagem
+    const imageResult = await this.generateImage(prompt, options)
+    
+    if (!imageResult.success || !imageResult.base64Data) {
+      return {
+        success: false,
+        error: imageResult.error || 'Falha na geração da imagem',
+        description: imageResult.description
+      }
+    }
+    
+    // Salvar imagem
+    const mimeType = imageResult.imageUrl?.split(';')[0].split(':')[1] || 'image/png'
+    const saveResult = await this.saveGeneratedImage(
+      imageResult.base64Data,
+      filename,
+      mimeType
+    )
+    
+    if (!saveResult.success) {
+      return {
+        success: false,
+        error: saveResult.error || 'Falha ao salvar a imagem'
+      }
+    }
+    
+    return {
+      success: true,
+      imageUrl: imageResult.imageUrl,
+      publicUrl: saveResult.publicUrl,
+      filePath: saveResult.filePath,
+      description: `Imagem gerada e salva com sucesso: ${filename}`
     }
   }
 
@@ -418,44 +940,41 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
       : ''
 
     const chartsText = params.includeCharts 
-      ? `\nGRÁFICOS GERADOS POR IA:
-- IMPORTANTE: Use tags [CHART:descrição] que serão automaticamente convertidas em imagens geradas por IA
-- A IA criará imagens profissionais de gráficos baseadas na descrição fornecida
-- OBRIGATÓRIO: Incluir exatamente ${params.chartIds?.length || 3} gráficos
+      ? `\nGRÁFICOS AUTOMÁTICOS:
+- USE TAGS ESPECIAIS: Use tags [CHART:id] para marcar onde os gráficos devem aparecer
+- PROCESSAMENTO AUTOMÁTICO: As tags serão automaticamente convertidas em imagens reais
+- OBRIGATÓRIO: Incluir exatamente ${params.chartIds?.length || 3} gráficos distribuídos nas seções
 ${params.chartIds ? 
-  `- IDS DOS GRÁFICOS PARA USAR:
-${params.chartIds.map((id, index) => `  * [CHART:${id}] - ${index === 0 ? 'na seção Metodologia' : index === 1 ? 'na seção Resultados' : 'na seção Discussão'}`).join('\n')}` :
-  `- Sugestões de gráficos (use estas tags exatas):
-  * [CHART:metodologia_fluxo] - Fluxograma da metodologia
-  * [CHART:resultados_comparativo] - Gráfico comparativo dos resultados
-  * [CHART:analise_dados] - Gráfico de análise dos dados coletados`
+  `- GRÁFICOS OBRIGATÓRIOS:
+${params.chartIds.map((id, index) => `  * Use [CHART:${id}] na seção ${index === 0 ? 'Metodologia' : index === 1 ? 'Resultados' : 'Discussão'}`).join('\n')}` :
+  `- Use estas tags de gráfico:
+  * [CHART:metodologia] na seção Metodologia
+  * [CHART:resultados] na seção Resultados  
+  * [CHART:discussao] na seção Discussão`
 }
 
-ORIENTAÇÕES PARA GRÁFICOS (COM ESPAÇAMENTO):
-- Integre os gráficos naturalmente nas seções apropriadas (Metodologia, Resultados, Discussão)
-- SEMPRE adicione contexto ANTES: parágrafo explicando o que será mostrado
-- SEMPRE adicione análise DEPOIS: parágrafo interpretando os dados visualizados
-- Use espaçamento e centralização adequados: <div style="margin: 40px 0; text-align: center;">[CHART:nome]</div>
-- IMPORTANTE: Os gráficos serão automaticamente gerados por IA como imagens profissionais
-- Contextualize cada gráfico explicando sua relevância baseada nas informações fornecidas
-- SEMPRE mencione o tipo e conteúdo esperado do gráfico no texto ao redor da tag
-- SEMPRE CENTRALIZE: Todas as tags de gráfico devem aparecer centralizadas
-- Exemplo completo:
-  
-  <p>A análise dos dados coletados revela tendências importantes, conforme demonstrado no gráfico de barras comparativo a seguir.</p>
-  
-  <div style="margin: 40px 0; text-align: center;">
-  [CHART:${params.chartIds?.[1] || 'resultados_comparativo'}]
-  </div>
-  
-  <p>O gráfico apresentado evidencia claramente uma evolução crescente nos indicadores analisados, com variações significativas entre as categorias observadas.</p>
+INSTRUÇÕES PARA TAGS DE GRÁFICO:
+- POSICIONAMENTO: Coloque as tags [CHART:id] onde o gráfico deve aparecer
+- CONTEXTO: Sempre inclua um parágrafo explicativo ANTES da tag
+- ANÁLISE: Sempre inclua um parágrafo de análise DEPOIS da tag
+- ESPAÇAMENTO: Use <div style="margin: 40px 0; text-align: center;">[CHART:id]</div>
+- IMPORTANTE: As tags [CHART:id] serão automaticamente convertidas em imagens reais
 
-- Use APENAS os IDs fornecidos acima no formato [CHART:ID]
-- Distribua os gráficos em seções diferentes com pelo menos 3 parágrafos entre eles
-- SEMPRE mencione que tipo de gráfico será mostrado (barras, linha, pizza, dispersão)
-- ESCREVA sobre o que o gráfico mostrará baseado no contexto da pesquisa
-- TODAS AS TAGS DE GRÁFICO DEVEM SER CENTRALIZADAS
-- A IA gerará automaticamente o gráfico mais apropriado baseado no ID e contexto
+EXEMPLO CORRETO:
+"A metodologia adotada seguiu um processo estruturado em quatro etapas principais, conforme demonstrado no fluxograma a seguir.
+
+<div style="margin: 40px 0; text-align: center;">
+[CHART:metodologia]
+</div>
+
+O fluxograma evidencia a sequência lógica das atividades, demonstrando a integração entre as diferentes fases da pesquisa e garantindo a consistência metodológica."
+
+IMPORTANTE:
+- SEMPRE use as tags [CHART:id] especificadas
+- NUNCA invente IDs diferentes dos fornecidos
+- DISTRIBUA os gráficos em seções diferentes
+- CONTEXTUALIZE cada gráfico no texto ao redor
+- As imagens serão geradas automaticamente baseadas no contexto
 `
       : ''
 

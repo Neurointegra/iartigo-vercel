@@ -105,10 +105,19 @@ export default function GeneratorPage() {
   ]
 
   const handleInputChange = (field: string, value: string | boolean) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }))
+    setFormData(prev => {
+      const newData = {
+        ...prev,
+        [field]: value
+      }
+      
+      // Se gráficos forem ativados, automaticamente marcar "dados coletados"
+      if (field === 'generateGraphics' && value === true) {
+        newData.hasCollectedData = true
+      }
+      
+      return newData
+    })
   }
 
   const handleFileUpload = (type: 'thesis' | 'data' | 'image') => {
@@ -232,6 +241,19 @@ export default function GeneratorPage() {
       })
       return false
     }
+
+    // Validação obrigatória: se gráficos forem solicitados, dados devem estar anexados
+    if (formData.generateGraphics) {
+      const dataFiles = uploadedFiles.filter(file => file.type === 'data')
+      if (dataFiles.length === 0) {
+        toast({
+          title: "Dados obrigatórios ausentes",
+          description: "Para gerar gráficos, você deve anexar pelo menos um arquivo de dados (CSV, Excel, JSON, TXT).",
+          variant: "destructive",
+        })
+        return false
+      }
+    }
     
     return true
   }
@@ -267,20 +289,6 @@ export default function GeneratorPage() {
         imageUrl: file.imageUrl // Incluir URL específica para imagens
       }))
 
-      // Não adicionar imagens fictícias - usar apenas arquivos realmente anexados
-
-      console.log('Dados dos arquivos preparados para envio:', filesData);
-
-      // Gerar IDs únicos para os gráficos se solicitado
-      let chartIds: string[] = []
-      if (formData.generateGraphics) {
-        chartIds = [
-          `chart_${Date.now()}_0`,
-          `chart_${Date.now()}_1`, 
-          `chart_${Date.now()}_2`
-        ]
-      }
-
       // Preparar dados para envio
       const articleData = {
         title: formData.title,
@@ -291,10 +299,9 @@ export default function GeneratorPage() {
         methodology: formData.justification,
         researchObjectives: formData.objectives,
         includeCharts: formData.generateGraphics,
-        chartIds: chartIds.length > 0 ? chartIds : undefined,
         includeTables: formData.hasCollectedData,
         authors: user ? [{
-          id: "1",
+          id: user.id,
           name: user.name || "",
           institution: user.institution || "",
           email: user.email || "",
@@ -328,29 +335,6 @@ export default function GeneratorPage() {
       // Processar conteúdo adicional
       let additionalContent = result.content;
       let generatedCharts: any[] = [];
-
-      // Gerar gráficos se solicitado
-      if (formData.generateGraphics) {
-        const charts = await generateSampleCharts()
-        if (charts.length > 0) {
-          // Usar os IDs que já foram gerados para o prompt
-          const chartsWithIds = charts.slice(0, chartIds.length).map((chart, index) => ({
-            ...chart,
-            id: chartIds[index]
-          }))
-          
-          generatedCharts = chartsWithIds; // Armazenar para salvar posteriormente
-          
-          let chartsContent = "\n\n<h2 style='color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px;'>Gráficos e Análises</h2>\n\n"
-          chartsWithIds.forEach((chart) => {
-            chartsContent += `<h3 style='color: #374151; margin-top: 24px;'>${chart.title}</h3>\n\n`;
-            chartsContent += `<p>O gráfico a seguir apresenta os dados ${chart.description || 'coletados na pesquisa'}:</p>\n\n`;
-            chartsContent += `[CHART:${chart.id}]\n\n`;
-            chartsContent += `<p style='font-style: italic; color: #6b7280; font-size: 14px;'>Fonte: Dados da pesquisa (${new Date().getFullYear()})</p>\n\n`;
-          })
-          additionalContent += chartsContent;
-        }
-      }
 
       // Adicionar imagens se solicitado
       if (formData.hasImages) {
@@ -459,128 +443,6 @@ export default function GeneratorPage() {
     } finally {
       setIsGenerating(false)
     }
-  }
-
-  const generateSampleCharts = (): Promise<any[]> => {
-    setIsGeneratingCharts(true)
-    
-    return new Promise((resolve) => {
-      // Simular delay de geração
-      setTimeout(() => {
-        const charts = [
-        {
-          id: 1,
-          type: 'bar',
-          title: 'Distribuição de Frequências',
-          data: {
-            labels: ['Categoria A', 'Categoria B', 'Categoria C', 'Categoria D', 'Categoria E'],
-            datasets: [{
-              label: 'Valores',
-              data: [12, 19, 3, 5, 2],
-              backgroundColor: [
-                'rgba(54, 162, 235, 0.6)',
-                'rgba(255, 99, 132, 0.6)',
-                'rgba(255, 205, 86, 0.6)',
-                'rgba(75, 192, 192, 0.6)',
-                'rgba(153, 102, 255, 0.6)',
-              ],
-              borderColor: [
-                'rgba(54, 162, 235, 1)',
-                'rgba(255, 99, 132, 1)',
-                'rgba(255, 205, 86, 1)',
-                'rgba(75, 192, 192, 1)',
-                'rgba(153, 102, 255, 1)',
-              ],
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              title: {
-                display: true,
-                text: 'Gráfico de Barras - Distribuição de Frequências'
-              }
-            },
-            scales: {
-              y: {
-                beginAtZero: true
-              }
-            }
-          }
-        },
-        {
-          id: 2,
-          type: 'line',
-          title: 'Evolução Temporal',
-          data: {
-            labels: ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun'],
-            datasets: [{
-              label: 'Série Temporal',
-              data: [65, 59, 80, 81, 56, 55],
-              fill: false,
-              borderColor: 'rgb(75, 192, 192)',
-              backgroundColor: 'rgba(75, 192, 192, 0.2)',
-              tension: 0.1
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              title: {
-                display: true,
-                text: 'Gráfico de Linha - Evolução Temporal'
-              }
-            }
-          }
-        },
-        {
-          id: 3,
-          type: 'pie',
-          title: 'Distribuição Percentual',
-          data: {
-            labels: ['Grupo 1', 'Grupo 2', 'Grupo 3', 'Grupo 4'],
-            datasets: [{
-              data: [30, 25, 25, 20],
-              backgroundColor: [
-                'rgba(255, 99, 132, 0.6)',
-                'rgba(54, 162, 235, 0.6)',
-                'rgba(255, 205, 86, 0.6)',
-                'rgba(75, 192, 192, 0.6)',
-              ],
-              borderColor: [
-                'rgba(255, 99, 132, 1)',
-                'rgba(54, 162, 235, 1)',
-                'rgba(255, 205, 86, 1)',
-                'rgba(75, 192, 192, 1)',
-              ],
-              borderWidth: 1
-            }]
-          },
-          options: {
-            responsive: true,
-            plugins: {
-              title: {
-                display: true,
-                text: 'Gráfico de Pizza - Distribuição Percentual'
-              }
-            }
-          }
-        }
-        ]
-        
-        setGeneratedCharts(charts)
-        setIsGeneratingCharts(false)
-        
-        toast({
-          title: "Gráficos gerados!",
-          description: "Os gráficos de exemplo foram criados com sucesso.",
-          variant: "default",
-        })
-        
-        resolve(charts)
-      }, 2000)
-    })
   }
 
   return (
@@ -762,6 +624,19 @@ export default function GeneratorPage() {
                       <p className="text-sm text-gray-500 mt-1">
                         Dados serão processados para análise
                       </p>
+                      {formData.generateGraphics && (
+                        <div className="mt-2">
+                          <Badge 
+                            variant={uploadedFiles.filter(f => f.type === 'data').length > 0 ? "default" : "destructive"}
+                            className="text-xs"
+                          >
+                            {uploadedFiles.filter(f => f.type === 'data').length > 0 
+                              ? `✓ ${uploadedFiles.filter(f => f.type === 'data').length} arquivo(s) de dados anexado(s)`
+                              : "⚠️ Dados obrigatórios para gráficos"
+                            }
+                          </Badge>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -778,6 +653,22 @@ export default function GeneratorPage() {
 
                 {formData.generateGraphics && (
                   <div className="ml-6 space-y-3">
+                    {/* Aviso sobre dados obrigatórios */}
+                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+                      <div className="flex items-start gap-3">
+                        <AlertCircle className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <p className="text-sm font-medium text-orange-800 mb-1">
+                            ⚠️ DADOS OBRIGATÓRIOS PARA GRÁFICOS
+                          </p>
+                          <p className="text-sm text-orange-700">
+                            Para gerar gráficos, você <strong>DEVE</strong> anexar arquivos contendo dados estruturados (CSV, Excel, JSON, TXT). 
+                            Sem dados reais, os gráficos não serão gerados.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
                     <p className="text-sm text-gray-600">Parâmetros para Geração de Gráficos (ex: "comparar média de idade por grupo", "distribuição de notas")</p>
                     <Textarea
                       placeholder="Descreva os parâmetros ou tipos de gráficos desejados."
@@ -785,24 +676,6 @@ export default function GeneratorPage() {
                       value={formData.graphicsParameters}
                       onChange={(e) => handleInputChange('graphicsParameters', e.target.value)}
                     />
-                    <Button 
-                      onClick={generateSampleCharts}
-                      disabled={isGeneratingCharts}
-                      variant="outline"
-                      className="w-full"
-                    >
-                      {isGeneratingCharts ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Gerando Gráficos...
-                        </>
-                      ) : (
-                        <>
-                          <BarChart3 className="mr-2 h-4 w-4" />
-                          Gerar Gráficos de Exemplo
-                        </>
-                      )}
-                    </Button>
                   </div>
                 )}
 
@@ -987,6 +860,10 @@ export default function GeneratorPage() {
                 <div className="flex items-start gap-2">
                   <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
                   <span>Arquivos suportados: PDF, DOCX, CSV, Excel, TXT</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
+                  <span><strong>Gráficos requerem dados:</strong> anexe arquivos CSV/Excel</span>
                 </div>
               </CardContent>
             </Card>
