@@ -585,14 +585,48 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
   const formatText = (text: string) => {
     if (!text) return text
     
+    // Primeiro corrigir entidades HTML problemáticas
+    let formatted = text
+      .replace(/&gt;/g, '>')
+      .replace(/&lt;/g, '<')
+      .replace(/&amp;/g, '&')
+      .replace(/&quot;/g, '"')
+    
     // Substituir **texto** por <strong>texto</strong> com estilos
-    let formatted = text.replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: bold; color: #1f2937; background-color: #fef3c7; padding: 2px 4px; border-radius: 3px;">$1</strong>')
+    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: bold; color: #1f2937; background-color: #fef3c7; padding: 2px 4px; border-radius: 3px;">$1</strong>')
     
     // Substituir *texto* por <em>texto</em> com estilos
     formatted = formatted.replace(/\*(.*?)\*/g, '<em style="font-style: italic; color: #3b82f6;">$1</em>')
     
-    // Substituir _texto_ por <u>texto</u> com estilos
-    formatted = formatted.replace(/_(.*?)_/g, '<u style="text-decoration: underline; text-decoration-color: #ef4444; text-decoration-thickness: 2px;">$1</u>')
+    // Substituir _texto_ por <u>texto</u> APENAS em texto normal (não URLs, arquivos ou HTML)
+    // Usar regex complexa com negative lookbehind para evitar formatação em contextos HTML
+    try {
+      // Regex complexa que evita formatar _texto_ dentro de:
+      // - Tags HTML (src="...", href="...", etc.)
+      // - URLs (http://, https://, ftp://)
+      // - Nomes de arquivos (.svg, .png, .jpg, etc.)
+      formatted = formatted.replace(/(?<!(?:src|href|data|class|id|style|alt|title)=['"][^'"]*|(?:https?|ftp):\/\/[^\s]*|[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+[^\s]*)\b_([^_\s]+(?:\s+[^_\s]+)*)_\b(?![^<]*>)/g, '<u style="text-decoration: underline; text-decoration-color: #ef4444; text-decoration-thickness: 2px;">$1</u>')
+    } catch (error) {
+      // Fallback para navegadores que não suportam negative lookbehind
+      console.warn('Negative lookbehind não suportado, usando fallback')
+      // Aplicar formatação básica apenas em palavras isoladas
+      formatted = formatted.replace(/\b_([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*)_\b/g, (match, content) => {
+        // Verificar se não está dentro de uma tag HTML
+        const beforeMatch = formatted.substring(0, formatted.indexOf(match))
+        const afterMatch = formatted.substring(formatted.indexOf(match) + match.length)
+        
+        // Se estiver entre < e >, provavelmente é uma tag HTML
+        const lastOpenTag = beforeMatch.lastIndexOf('<')
+        const lastCloseTag = beforeMatch.lastIndexOf('>')
+        const nextCloseTag = afterMatch.indexOf('>')
+        
+        if (lastOpenTag > lastCloseTag && nextCloseTag !== -1) {
+          return match // Não formatar se estiver dentro de uma tag
+        }
+        
+        return `<u style="text-decoration: underline; text-decoration-color: #ef4444; text-decoration-thickness: 2px;">${content}</u>`
+      })
+    }
     
     return formatted
   }

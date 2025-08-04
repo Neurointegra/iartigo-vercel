@@ -217,7 +217,7 @@ export class GeminiService {
         })
 
         const analysisPrompt = `
-Você é um especialista em análise de dados e visualização. Analise os dados fornecidos e identifique os melhores gráficos para representar as informações.
+Você é um especialista em análise de dados e visualização científica. Analise CRITERIOSAMENTE os dados fornecidos e identifique apenas os gráficos que fazem SENTIDO CIENTÍFICO.
 
 DADOS FORNECIDOS:
 \`\`\`
@@ -227,49 +227,57 @@ ${dataContent.substring(0, 3000)}${dataContent.length > 3000 ? '\n...(dados trun
 ARQUIVO: ${fileName}
 CONTEXTO: ${context || 'Artigo científico'}
 
-INSTRUÇÕES:
-1. Analise os dados e identifique padrões, tendências e relações importantes
-2. Sugira 2-4 gráficos diferentes que melhor representem os dados
-3. Para cada gráfico, extraia dados específicos e escolha o tipo mais adequado
-4. Gere IDs únicos e descritivos para cada gráfico
-5. Forneça contexto analítico para cada visualização
+CRITÉRIOS PARA ANÁLISE:
+1. 🔍 Identifique dados numéricos ou categóricos nos arquivos fornecidos
+2. 📊 Sugira gráficos apenas se houver dados estruturados suficientes
+3. 🎯 Quantidade flexível: 1-3 gráficos conforme valor agregado aos dados
+4. ✅ Use dados que estão claramente presentes no arquivo
+5. 🧭 Priorize qualidade sobre quantidade - melhor poucos gráficos relevantes
 
-TIPOS DE GRÁFICO DISPONÍVEIS:
-- "bar": Para comparações entre categorias
-- "line": Para tendências ao longo do tempo ou sequências
-- "pie": Para distribuições e proporções (máximo 8 categorias)
-- "scatter": Para correlações entre duas variáveis
+QUANDO SUGERIR CADA TIPO:
+- "bar": Comparar categorias/grupos (ex: experimental vs controle, por faixa etária)
+- "line": Tendências temporais ou sequenciais (ex: evolução ao longo do tempo)
+- "pie": Distribuições percentuais (ex: proporção por categoria, até 6 fatias)
+- "scatter": Correlações entre duas variáveis contínuas (ex: idade vs pontuação)
 
 FORMATO DE RESPOSTA (JSON válido):
 {
   "charts": [
     {
-      "id": "id_unico_descritivo",
-      "name": "Nome Descritivo do Gráfico",
+      "id": "id_descritivo_especifico",
+      "name": "Título Específico e Científico",
       "type": "bar|line|pie|scatter",
       "data": {
-        "labels": ["categoria1", "categoria2", ...],
-        "values": [valor1, valor2, ...],
-        "datasets": [opcional para múltiplas séries]
+        "labels": ["categoria_específica_1", "categoria_específica_2"],
+        "values": [valor_real_1, valor_real_2],
+        "unit": "unidade_medida" // ex: "anos", "kg", "%", "pessoas"
       },
-      "description": "Descrição detalhada do que o gráfico mostra",
-      "analysisContext": "Contexto analítico e insights dos dados"
+      "description": "O que EXATAMENTE este gráfico mostra e por que é relevante",
+      "analysisContext": "Insight científico específico extraído destes dados"
     }
   ]
 }
 
 REGRAS IMPORTANTES:
-- Use dados REAIS extraídos do conteúdo fornecido
-- IDs devem ser únicos e descritivos (ex: "vendas_trimestre", "distribuicao_idade")
-- Dados devem ser numéricos válidos
-- Máximo 4 gráficos por análise
-- Descrições devem ser específicas e informativas
-- analysisContext deve explicar insights e padrões encontrados
+❌ NÃO invente dados que não existem no arquivo
+❌ NÃO use labels extremamente genéricos como "Item 1", "Categoria A"
+❌ NÃO force quantidade específica - prefira qualidade
+✅ EXTRAIA dados reais do conteúdo fornecido
+✅ USE nomes descritivos baseados no contexto
+✅ INCLUA unidades quando identificáveis
+✅ SEJA específico mas realista
+✅ GERE apenas gráficos que realmente agregam valor
 
-EXEMPLOS DE DADOS VÁLIDOS:
-Para bar/line: {"labels": ["Jan", "Feb", "Mar"], "values": [100, 150, 120]}
-Para pie: {"labels": ["Categoria A", "Categoria B"], "values": [30, 70]}
-Para scatter: {"data": [{"x": 10, "y": 20}, {"x": 15, "y": 25}]}
+FLEXIBILIDADE PERMITIDA:
+- Pode agrupar dados similares para formar categorias
+- Pode calcular médias, totais ou proporções dos dados
+- Pode interpretar dados de diferentes formatos (CSV, JSON, texto)
+- Pode usar sinônimos ou termos relacionados para labels
+
+EXEMPLO DE DADOS VÁLIDOS:
+{"labels": ["Grupo Controle", "Grupo Experimental"], "values": [23.5, 31.2], "unit": "média (pontos)"}
+
+SE OS DADOS NÃO SUPORTAREM GRÁFICOS VÁLIDOS, retorne: {"charts": []}
         `
 
         const result = await model.generateContent(analysisPrompt)
@@ -297,21 +305,102 @@ Para scatter: {"data": [{"x": 10, "y": 20}, {"x": 15, "y": 25}]}
           throw new Error('Estrutura de resposta inválida - charts não encontrado')
         }
 
-        // Validar cada gráfico
+        // Validar cada gráfico com critérios rigorosos
         const validCharts = jsonData.charts.filter((chart: any) => {
-          const isValid = chart.id && chart.name && chart.type && chart.data && chart.description
-          if (!isValid) {
-            console.warn('⚠️ Gráfico inválido ignorado:', chart)
+          // Validação básica de estrutura
+          if (!chart.id || !chart.name || !chart.type || !chart.data || !chart.description) {
+            console.warn('⚠️ Gráfico rejeitado: estrutura incompleta:', chart)
+            return false
           }
-          return isValid
+
+          // Validação de tipos permitidos
+          const allowedTypes = ['bar', 'line', 'pie', 'scatter']
+          if (!allowedTypes.includes(chart.type)) {
+            console.warn('⚠️ Gráfico rejeitado: tipo inválido:', chart.type)
+            return false
+          }
+
+          // Validação específica por tipo (mais flexível)
+          if (chart.type === 'bar' || chart.type === 'line') {
+            if (!chart.data.labels || !chart.data.values || 
+                !Array.isArray(chart.data.labels) || !Array.isArray(chart.data.values) ||
+                chart.data.labels.length < 2 || chart.data.values.length < 2) {
+              console.warn('⚠️ Gráfico bar/line rejeitado: dados insuficientes:', chart)
+              return false
+            }
+            // Permitir pequenas discrepâncias no tamanho dos arrays
+            if (Math.abs(chart.data.labels.length - chart.data.values.length) > 1) {
+              console.warn('⚠️ Gráfico bar/line rejeitado: arrays inconsistentes:', chart)
+              return false
+            }
+          }
+
+          if (chart.type === 'pie') {
+            if (!chart.data.labels || !chart.data.values || 
+                !Array.isArray(chart.data.labels) || !Array.isArray(chart.data.values) ||
+                chart.data.labels.length < 2 || chart.data.values.length < 2 ||
+                chart.data.labels.length > 8) { // Máximo 8 fatias
+              console.warn('⚠️ Gráfico pie rejeitado: dados inadequados:', chart)
+              return false
+            }
+          }
+
+          // Validar que valores são numéricos
+          if (chart.data.values && Array.isArray(chart.data.values)) {
+            const hasValidNumbers = chart.data.values.every((val: any) => 
+              typeof val === 'number' && !isNaN(val) && isFinite(val)
+            )
+            if (!hasValidNumbers) {
+              console.warn('⚠️ Gráfico rejeitado: valores não numéricos válidos:', chart)
+              return false
+            }
+          }
+
+          // Validar que não tem labels extremamente genéricos (mais flexível)
+          if (chart.data.labels && Array.isArray(chart.data.labels)) {
+            const veryGenericLabels = chart.data.labels.filter((label: string) => 
+              /^(item|categoria|elemento|grupo)\s*[0-9]+$/i.test(label?.toString() || '') ||
+              /^(a|b|c|d|e|f)$/i.test(label?.toString() || '')
+            )
+            // Rejeitar apenas se TODOS os labels forem genéricos
+            if (veryGenericLabels.length === chart.data.labels.length && chart.data.labels.length > 1) {
+              console.warn('⚠️ Gráfico rejeitado: todos os labels são extremamente genéricos:', chart)
+              return false
+            }
+          }
+
+          // Validar que nome não é extremamente genérico (mais flexível para IDs aleatórios)
+          if (/^(gráfico|chart|análise|dados?)\s*(de\s*)?dados?$/i.test(chart.name) ||
+              /^(gráfico|chart)\s*[0-9]+$/i.test(chart.name)) {
+            console.warn('⚠️ Gráfico rejeitado: nome muito genérico:', chart.name)
+            return false
+          }
+
+          console.log('✅ Gráfico validado:', chart.id)
+          return true
         })
 
         if (validCharts.length === 0) {
           throw new Error('Nenhum gráfico válido foi gerado pela análise')
         }
 
-        console.log(`✅ Análise concluída: ${validCharts.length} gráficos identificados`)
-        return { charts: validCharts }
+        // Aplicar validação de relevância (mais flexível)
+        const contextuallyValidCharts = validCharts.filter((chart: any) => {
+          const relevanceCheck = this.validateChartRelevance(chart, dataContent, context)
+          if (!relevanceCheck.isValid) {
+            console.warn(`ℹ️ Gráfico com baixa relevância mantido: ${chart.id} - ${relevanceCheck.reason}`)
+            // Manter gráfico mesmo com baixa relevância, apenas logar o aviso
+          }
+          return true // Aceitar todos os gráficos que passaram na validação estrutural
+        })
+
+        if (contextuallyValidCharts.length === 0) {
+          console.warn('⚠️ Todos os gráficos foram rejeitados por falta de relevância')
+          return { charts: [] }
+        }
+
+        console.log(`✅ Análise concluída: ${contextuallyValidCharts.length} gráficos válidos e relevantes`)
+        return { charts: contextuallyValidCharts }
 
       }, 2, 2000)
 
@@ -365,7 +454,7 @@ Para scatter: {"data": [{"x": 10, "y": 20}, {"x": 15, "y": 25}]}
         })
 
         const svgPrompt = `
-Você é um especialista em SVG e visualização de dados. Gere um gráfico SVG profissional baseado nos dados analisados.
+Você é um especialista em SVG e visualização científica. Gere um gráfico SVG PROFISSIONAL e PRECISO baseado EXCLUSIVAMENTE nos dados analisados.
 
 INFORMAÇÕES DO GRÁFICO:
 - ID: ${chart.id}
@@ -374,70 +463,97 @@ INFORMAÇÕES DO GRÁFICO:
 - Descrição: ${chart.description}
 - Contexto: ${chart.analysisContext}
 
-DADOS:
+DADOS REAIS PARA PLOTAR:
 ${JSON.stringify(chart.data, null, 2)}
 
-ESPECIFICAÇÕES TÉCNICAS:
-- Dimensões: ${width}x${height}
+ESPECIFICAÇÕES TÉCNICAS OBRIGATÓRIAS:
+- Dimensões: ${width}x${height} pixels
 - Fundo: Branco (#FFFFFF)
-- Cores: Paleta profissional (#2563EB, #059669, #DC2626, #F59E0B, #7C3AED)
-- Fonte: Arial, sans-serif
-- Margens: 60px (topo/lateral), 80px (inferior)
+- Paleta: Azul científico (#2563EB), Verde (#059669), Vermelho (#DC2626), Laranja (#F59E0B), Roxo (#7C3AED)
+- Fonte: "Arial", sans-serif
+- Margens: 80px topo/lateral, 100px inferior para labels
 
-INSTRUÇÕES ESPECÍFICAS POR TIPO:
+INSTRUÇÕES CRÍTICAS POR TIPO:
 
-GRÁFICO DE BARRAS (bar):
-- Barras verticais com espaçamento adequado
-- Eixo X: labels das categorias
-- Eixo Y: escala dos valores
-- Grid horizontal discreto
-- Valores no topo das barras
+📊 GRÁFICO DE BARRAS (bar):
+- Barras verticais, largura proporcional ao espaço disponível
+- Altura das barras EXATAMENTE proporcional aos valores
+- Eixo Y com escala precisa (0 até valor máximo + 10%)
+- Labels do eixo X rotacionados se necessário
+- Valores numéricos no topo de cada barra
+- Grid horizontal sutil para referência
 
-GRÁFICO DE LINHA (line):
-- Linha contínua com pontos marcados
-- Eixo X: sequência ou tempo
-- Eixo Y: escala dos valores
-- Grid horizontal e vertical discreto
-- Pontos destacados
+📈 GRÁFICO DE LINHA (line):
+- Linha contínua conectando pontos na sequência exata
+- Pontos circulares marcados (raio 4px)
+- Eixos X e Y com escalas proporcionais aos dados
+- Grid discreto para melhor leitura
+- Valores nos pontos quando espaço permitir
 
-GRÁFICO DE PIZZA (pie):
-- Fatias proporcionais aos valores
+🥧 GRÁFICO DE PIZZA (pie):
+- Fatias EXATAMENTE proporcionais aos valores percentuais
+- Início às 12h (topo), sentido horário
+- Labels externos com linhas conectoras
+- Percentuais dentro das fatias (se >5%) ou na legenda
 - Cores alternadas da paleta
-- Labels externos com linhas de conexão
-- Percentuais nas fatias ou labels
-- Legenda lateral
 
-GRÁFICO DE DISPERSÃO (scatter):
-- Pontos plotados nas coordenadas X,Y
-- Eixos com escalas apropriadas
-- Grid discreto
-- Pontos com destaque visual
+🔷 GRÁFICO DE DISPERSÃO (scatter):
+- Pontos plotados nas coordenadas X,Y exatas
+- Eixos com escalas apropriadas aos dados
+- Grid para facilitar leitura
+- Pontos destacados (raio 5px, borda mais escura)
 
-ELEMENTOS OBRIGATÓRIOS:
-1. Título centralizado no topo
-2. Eixos com labels descritivos
-3. Escala adequada aos dados
-4. Grid de fundo discreto
-5. Legenda quando necessário
-6. Cores consistentes e profissionais
+ELEMENTOS OBRIGATÓRIOS EM TODO SVG:
+1. 📝 Título centralizado (font-size: 20px, font-weight: bold)
+2. 📏 Eixos com labels descritivos e unidades
+3. 📊 Escala numérica precisa e proporcional
+4. 🎨 Cores consistentes da paleta definida
+5. 📐 Grid de referência sutil (#F3F4F6)
+6. 🏷️ Legenda quando necessário
+
+VALIDAÇÃO FINAL OBRIGATÓRIA:
+- Todos os valores dos dados estão representados?
+- As proporções estão matematicamente corretas?
+- Os labels são legíveis e não se sobrepõem?
+- O título descreve exatamente o que é mostrado?
 
 FORMATO DE RESPOSTA:
-Retorne APENAS o código SVG completo, sem comentários ou explicações.
-Comece com <svg> e termine com </svg>.
+Retorne APENAS o código SVG válido e completo.
+Inicie com <svg e termine com </svg>
+NÃO adicione comentários, explicações ou markdown.
 
-EXEMPLO DE ESTRUTURA:
+🚫 PROIBIÇÕES CRÍTICAS:
+- NUNCA use elementos <script> ou JavaScript
+- NUNCA use loops (for, while) ou funções
+- NUNCA use document.write ou métodos DOM
+- Gere TODOS os elementos SVG estaticamente
+- Use apenas tags SVG válidas: <rect>, <circle>, <line>, <path>, <text>, <g>
+
+TEMPLATE ESTRUTURAL:
 <svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
-  <!-- Fundo -->
   <rect width="100%" height="100%" fill="#FFFFFF"/>
+  <defs>
+    <style>
+      .title { font: bold 20px Arial, sans-serif; fill: #1F2937; }
+      .axis-label { font: 14px Arial, sans-serif; fill: #374151; }
+      .data-label { font: 12px Arial, sans-serif; fill: #6B7280; }
+      .grid-line { stroke: #F3F4F6; stroke-width: 1; }
+    </style>
+  </defs>
   
-  <!-- Título -->
-  <text x="${width/2}" y="30" text-anchor="middle" font-size="18" font-weight="bold" fill="#1F2937">
-    ${chart.name}
-  </text>
+  <text x="${width/2}" y="35" text-anchor="middle" class="title">${chart.name}</text>
   
-  <!-- Seus elementos específicos do gráfico aqui -->
+  <!-- GERE TODOS OS ELEMENTOS DIRETAMENTE - NÃO USE JAVASCRIPT -->
+  <!-- Para múltiplos elementos similares, repita as tags manualmente -->
+  <!-- Exemplo de barras: <rect x="10" y="20" width="30" height="40" fill="#2563EB"/> -->
+  <!-- Exemplo de texto: <text x="25" y="15" text-anchor="middle" class="data-label">Valor</text> -->
   
 </svg>
+
+⚠️ CRÍTICO: 
+1. Verifique que TODOS os valores dos dados estão plotados corretamente
+2. Use APENAS elementos SVG estáticos - NÃO use JavaScript
+3. Repita manualmente elementos similares ao invés de usar loops
         `
 
         const result = await model.generateContent(svgPrompt)
@@ -452,9 +568,47 @@ EXEMPLO DE ESTRUTURA:
           }
         }
 
-        // Verificar se é SVG válido
+        // Verificar se é SVG válido e bem formado
         if (!svgContent.startsWith('<svg') || !svgContent.endsWith('</svg>')) {
-          throw new Error('SVG gerado não é válido')
+          throw new Error('SVG gerado não é válido: deve começar com <svg e terminar com </svg>')
+        }
+
+        // Validações adicionais de qualidade do SVG
+        const svgValidations = [
+          { test: () => svgContent.includes('width='), error: 'SVG deve ter atributo width' },
+          { test: () => svgContent.includes('height='), error: 'SVG deve ter atributo height' },
+          { test: () => svgContent.includes('xmlns='), error: 'SVG deve ter namespace xmlns' },
+          { test: () => svgContent.includes('<text'), error: 'SVG deve conter elementos de texto' },
+          { test: () => !svgContent.includes('<Chart'), error: 'SVG contém tag inválida <Chart>' },
+          { test: () => !svgContent.includes('[CHART'), error: 'SVG contém tag de placeholder [CHART]' },
+          { test: () => !svgContent.includes('<script'), error: 'SVG não deve conter elementos <script>' },
+          { test: () => !svgContent.includes('document.'), error: 'SVG não deve conter código JavaScript' },
+          { test: () => !svgContent.includes('for ('), error: 'SVG não deve conter loops JavaScript' },
+          { test: () => !svgContent.includes('function'), error: 'SVG não deve conter funções JavaScript' }
+        ]
+
+        for (const validation of svgValidations) {
+          if (!validation.test()) {
+            throw new Error(`SVG inválido: ${validation.error}`)
+          }
+        }
+
+        // Verificar balanceamento básico de tags principais
+        const mainTags = ['<svg', '<rect', '<text', '<circle', '<line', '<path', '<g']
+        for (const tag of mainTags) {
+          const openCount = (svgContent.match(new RegExp(tag, 'g')) || []).length
+          const closeTag = tag.replace('<', '</')
+          const closeCount = (svgContent.match(new RegExp(closeTag, 'g')) || []).length
+          
+          // Para tags auto-fechantes, permitir diferença
+          if (tag !== '<rect' && tag !== '<circle' && tag !== '<line' && openCount !== closeCount && openCount > 0) {
+            console.warn(`⚠️ Possível desbalanceamento em ${tag}: ${openCount} aberto(s), ${closeCount} fechado(s)`)
+          }
+        }
+
+        // Verificar se o título do gráfico está presente no SVG
+        if (!svgContent.includes(chart.name.substring(0, 20))) {
+          console.warn('⚠️ Aviso: Título do gráfico pode não estar presente no SVG')
         }
 
         console.log(`✅ SVG gerado para ${chart.id}: ${svgContent.length} caracteres`)
@@ -472,6 +626,64 @@ EXEMPLO DE ESTRUTURA:
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Erro desconhecido na geração de SVG'
+      }
+    }
+  }
+
+  /**
+   * Valida se um gráfico faz sentido científico baseado nos dados originais
+   */
+  static validateChartRelevance(
+    chart: any,
+    originalData: string,
+    context: string
+  ): { isValid: boolean; reason?: string } {
+    try {
+      // Verificar se os dados do gráfico têm correspondência no texto original
+      const chartLabels = chart.data.labels || []
+      const chartValues = chart.data.values || []
+
+      // Validar se pelo menos 70% dos labels aparecem no texto original
+      const labelsInText = chartLabels.filter((label: string) => 
+        originalData.toLowerCase().includes(label.toLowerCase())
+      )
+      
+      if (labelsInText.length < chartLabels.length * 0.7) {
+        return { 
+          isValid: false, 
+          reason: `Labels do gráfico não encontrados nos dados originais: ${chartLabels.join(', ')}` 
+        }
+      }
+
+      // Verificar se os valores são realistas (não muito round numbers)
+      const hasOnlyRoundNumbers = chartValues.every((val: number) => val % 10 === 0)
+      if (hasOnlyRoundNumbers && chartValues.length > 2) {
+        return { 
+          isValid: false, 
+          reason: 'Valores suspeitos: todos são números redondos (possível invenção)' 
+        }
+      }
+
+      // Verificar se o contexto do gráfico está relacionado ao tema
+      const contextWords = context.toLowerCase().split(/\s+/)
+      const chartDescription = (chart.description || '').toLowerCase()
+      const hasContextRelevance = contextWords.some(word => 
+        word.length > 3 && chartDescription.includes(word)
+      )
+
+      if (!hasContextRelevance && context.length > 10) {
+        return { 
+          isValid: false, 
+          reason: 'Gráfico não parece relacionado ao contexto da pesquisa' 
+        }
+      }
+
+      return { isValid: true }
+
+    } catch (error) {
+      return { 
+        isValid: false, 
+        reason: `Erro na validação: ${error instanceof Error ? error.message : 'Erro desconhecido'}` 
       }
     }
   }
@@ -895,14 +1107,19 @@ ${params.attachedFiles.map(file => {
 ORIENTAÇÕES PARA ARQUIVOS:
 ${params.attachedFiles.map(file => {
   if (file.type === 'data') {
-    return `- Referencie dados do arquivo "${file.fileName}" nas seções de Metodologia e Resultados${file.content ? ' - Use os dados fornecidos para gerar análises específicas' : ''}`
+    return `- DADOS ESTRUTURADOS: Use os dados fornecidos para análises nas seções de Metodologia e Resultados${file.content ? ' - Gere análises específicas baseadas no conteúdo' : ''}
+    - IMPORTANTE: NÃO mencione o nome do arquivo "${file.fileName}" no texto do artigo
+    - Refira-se genericamente como "dados coletados", "informações obtidas", "base de dados da pesquisa"`
   } else if (file.type === 'thesis') {
-    return `- Use "${file.fileName}" como base teórica na Revisão da Literatura${file.content ? ' - Incorpore as informações do conteúdo nas fundamentações teóricas' : ''}`
+    return `- BASE TEÓRICA: Use como fundamentação na Revisão da Literatura${file.content ? ' - Incorpore as informações nas fundamentações teóricas' : ''}
+    - IMPORTANTE: NÃO mencione o nome do arquivo "${file.fileName}" no texto do artigo
+    - Refira-se genericamente como "literatura especializada", "estudos anteriores", "pesquisas relacionadas"`
   } else if (file.type === 'image') {
     return `- OBRIGATÓRIO: Use EXATAMENTE a referência [Imagem: ${file.fileName}] (não invente outros nomes)
   - CONTEÚDO DA IMAGEM: ${file.description || 'Imagem relacionada ao tema da pesquisa'}
   - ESPAÇAMENTO E CENTRALIZAÇÃO: Sempre use <div style="margin: 30px 0; text-align: center;">[Imagem: ${file.fileName}]</div>
   - IMPORTANTE: As tags [Imagem: nome] são apenas marcadores - NÃO são imagens reais
+  - NÃO MENCIONE O NOME DO ARQUIVO no texto: Em vez de "conforme ${file.fileName}", use "conforme ilustrado na figura"
   - CONTEXTO ANTES: Inclua parágrafo explicativo antes da imagem descrevendo o que ela mostra
   - ANÁLISE DEPOIS: Inclua parágrafo de interpretação após a imagem
   - SEMPRE descreva o conteúdo da imagem no texto ao redor da tag
@@ -914,7 +1131,7 @@ ${params.attachedFiles.map(file => {
     [Imagem: ${file.fileName}]
     </div>
     
-    <p>A imagem demonstra claramente ${file.description || 'os aspectos principais da metodologia'}, evidenciando a sequência lógica das etapas propostas.</p>
+    <p>A ilustração demonstra claramente ${file.description || 'os aspectos principais da metodologia'}, evidenciando a sequência lógica das etapas propostas.</p>
     
   - NÃO use imagens fictícias como "logo.png" ou "diagrama.jpg" - use APENAS "${file.fileName}"
   - Considere o conteúdo visual ao referenciar: ${file.description || 'adapte a descrição ao contexto'}
@@ -943,38 +1160,40 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
       ? `\nGRÁFICOS AUTOMÁTICOS:
 - USE TAGS ESPECIAIS: Use tags [CHART:id] para marcar onde os gráficos devem aparecer
 - PROCESSAMENTO AUTOMÁTICO: As tags serão automaticamente convertidas em imagens reais
-- OBRIGATÓRIO: Incluir exatamente ${params.chartIds?.length || 3} gráficos distribuídos nas seções
+- QUANTIDADE FLEXÍVEL: Inclua 1-3 gráficos conforme necessário para o conteúdo
+- IDs ALEATÓRIOS: Gere IDs únicos e aleatórios (ex: chart_abc123, graph_xyz789, data_def456)
 ${params.chartIds ? 
-  `- GRÁFICOS OBRIGATÓRIOS:
-${params.chartIds.map((id, index) => `  * Use [CHART:${id}] na seção ${index === 0 ? 'Metodologia' : index === 1 ? 'Resultados' : 'Discussão'}`).join('\n')}` :
-  `- Use estas tags de gráfico:
-  * [CHART:metodologia] na seção Metodologia
-  * [CHART:resultados] na seção Resultados  
-  * [CHART:discussao] na seção Discussão`
+  `- GRÁFICOS DISPONÍVEIS:
+${params.chartIds.map((id, index) => `  * Use [CHART:${id}] onde for mais apropriado contextualmente`).join('\n')}` :
+  `- EXEMPLOS DE IDs ALEATÓRIOS:
+  * [CHART:analysis_rnd847] para análises gerais
+  * [CHART:comparison_xyz123] para comparações
+  * [CHART:distribution_abc456] para distribuições`
 }
 
 INSTRUÇÕES PARA TAGS DE GRÁFICO:
-- POSICIONAMENTO: Coloque as tags [CHART:id] onde o gráfico deve aparecer
-- CONTEXTO: Sempre inclua um parágrafo explicativo ANTES da tag
+- POSICIONAMENTO: Coloque as tags [CHART:id] onde o gráfico agregue valor científico
+- CONTEXTO GENÉRICO: Refira-se ao gráfico como "ilustração", "demonstração", "visualização"
+- EVITE NOMES ESPECÍFICOS: NÃO mencione o ID do gráfico no texto do artigo
 - ANÁLISE: Sempre inclua um parágrafo de análise DEPOIS da tag
 - ESPAÇAMENTO: Use <div style="margin: 40px 0; text-align: center;">[CHART:id]</div>
 - IMPORTANTE: As tags [CHART:id] serão automaticamente convertidas em imagens reais
 
-EXEMPLO CORRETO:
-"A metodologia adotada seguiu um processo estruturado em quatro etapas principais, conforme demonstrado no fluxograma a seguir.
+EXEMPLO CORRETO DE REFERÊNCIA GENÉRICA:
+"A metodologia adotada seguiu um processo estruturado, conforme demonstrado na visualização a seguir.
 
 <div style="margin: 40px 0; text-align: center;">
-[CHART:metodologia]
+[CHART:process_rnd847]
 </div>
 
-O fluxograma evidencia a sequência lógica das atividades, demonstrando a integração entre as diferentes fases da pesquisa e garantindo a consistência metodológica."
+A ilustração evidencia a sequência lógica das atividades, demonstrando a integração entre as diferentes fases da pesquisa."
 
-IMPORTANTE:
-- SEMPRE use as tags [CHART:id] especificadas
-- NUNCA invente IDs diferentes dos fornecidos
-- DISTRIBUA os gráficos em seções diferentes
-- CONTEXTUALIZE cada gráfico no texto ao redor
-- As imagens serão geradas automaticamente baseadas no contexto
+DIRETRIZES IMPORTANTES:
+- NUNCA mencione o nome/ID do gráfico no texto (ex: "chart_abc123", "gráfico process_rnd847")
+- USE termos genéricos: "a visualização", "o gráfico", "a ilustração", "a demonstração"
+- DISTRIBUA conforme necessário - não force 3 gráficos se não fizer sentido
+- CONTEXTUALIZE cada gráfico no texto ao redor sem nomear especificamente
+- As imagens serão geradas automaticamente baseadas no contexto da seção
 `
       : ''
 
@@ -993,6 +1212,14 @@ IMPORTANTE:
     ${attachedFilesText}
     ${chartsText}
 
+    🚫 PROIBIÇÃO CRÍTICA - NÃO MENCIONAR ARQUIVOS:
+    • JAMAIS cite nomes de arquivos no texto do artigo (ex: "dados.csv", "pesquisa.pdf", "imagem.jpg")
+    • NÃO use frases como "baseado no arquivo X", "conforme documento Y", "segundo dados.csv"
+    • USE sempre referências genéricas: "dados coletados", "informações obtidas", "literatura especializada"
+    • EVITE: "Os dados do arquivo dados.csv mostram..." 
+    • PREFIRA: "Os dados coletados revelam..."
+    • O artigo deve parecer natural, sem referências a fontes externas específicas
+
     DIRETRIZES FUNDAMENTAIS:
     ✓ Idioma: Português brasileiro acadêmico formal
     ✓ Conteúdo: 100% específico e detalhado (ZERO placeholders)
@@ -1008,22 +1235,28 @@ IMPORTANTE:
 
     REGRAS PARA ELEMENTOS VISUAIS:
     ${params.includeCharts ? 
-    `🔹 GRÁFICOS COMO IMAGENS OBRIGATÓRIOS: Inclua ${params.chartIds?.length || 3} gráficos convertidos em imagens
+    `🔹 GRÁFICOS (QUANTIDADE FLEXÍVEL): Inclua 1-3 gráficos conforme necessário
     ${params.chartIds ? 
-      `• Use SOMENTE estes nomes EXATOS: ${params.chartIds.map(id => `[Imagem: chart_${id}.svg]`).join(', ')}
-    • NUNCA use tags [CHART:] - SEMPRE use [Imagem: chart_id.svg]
-    • ESPAÇAMENTO E CENTRALIZAÇÃO OBRIGATÓRIOS: <div style="margin: 40px 0; text-align: center;">[Imagem: chart_id.svg]</div>
-    • IMPORTANTE: Os gráficos são convertidos automaticamente em imagens SVG profissionais
-    • PADRÃO: Parágrafo contexto + Imagem de gráfico centralizada + Parágrafo análise descritiva
-    • Distribua nas seções: ${params.chartIds.map((id, i) => `[Imagem: chart_${id}.svg] na ${i === 0 ? 'Metodologia' : i === 1 ? 'Resultados' : 'Discussão'}`).join(', ')}
+      `• Use SOMENTE estas TAGS: ${params.chartIds.map(id => `[CHART:${id}]`).join(', ')}
+    • FORMATO CORRETO: [CHART:id] (NÃO use [Imagem: chart_id.svg])
+    • REFERÊNCIAS GENÉRICAS: Use "a visualização", "o gráfico", "a ilustração" - NUNCA mencione o ID
+    • ESPAÇAMENTO E CENTRALIZAÇÃO OBRIGATÓRIOS: <div style="margin: 40px 0; text-align: center;">[CHART:id]</div>
+    • IMPORTANTE: As tags [CHART:id] são convertidas automaticamente em imagens SVG profissionais
+    • PADRÃO: Parágrafo contexto + Tag de gráfico centralizada + Parágrafo análise descritiva
+    • Distribua conforme necessário - não force se não agregar valor
     • DISTÂNCIA MÍNIMA: 3 parágrafos entre gráficos consecutivos
-    • SEMPRE DESCREVA o que o gráfico mostra no texto ao redor
-    • SEMPRE CENTRALIZE: Todas as imagens de gráfico devem aparecer centralizadas` :
-      `• NUNCA use tags [CHART:] - SEMPRE use [Imagem: chart_nome.svg]
-      • Sugestão de distribuição:
-      - [Imagem: chart_metodologia_processo.svg] na Metodologia
-      - [Imagem: chart_resultados_principal.svg] nos Resultados
-      - [Imagem: chart_discussao_comparativa.svg] na Discussão`
+    • SEMPRE DESCREVA genericamente o que o gráfico mostra no texto ao redor
+    • SEMPRE CENTRALIZE: Todas as tags de gráfico devem aparecer centralizadas
+    • EXEMPLO DE REFERÊNCIA CORRETA: "Os dados apresentam tendências significativas, conforme demonstrado na visualização a seguir. A análise evidencia os padrões identificados na pesquisa."` :
+      `• USE TAGS: [CHART:id_aleatorio] com IDs únicos gerados aleatoriamente
+      • FORMATO: [CHART:analysis_rnd123], [CHART:comparison_xyz789], [CHART:results_abc456]
+      • REFERÊNCIAS GENÉRICAS: "a visualização", "o gráfico", "a demonstração"
+      • Sugestão de distribuição flexível:
+      - [CHART:methodology_rnd123] se apropriado na Metodologia
+      - [CHART:results_xyz789] se apropriado nos Resultados
+      - [CHART:discussion_abc456] se apropriado na Discussão
+      • SEMPRE centralize: <div style="margin: 40px 0; text-align: center;">[CHART:id]</div>
+      • NUNCA mencione os IDs no texto do artigo`
     }` : 
     `🔹 GRÁFICOS: Não solicitados - NÃO criar tags de gráfico`
     }
@@ -1165,6 +1398,12 @@ IMPORTANTE:
 
     ❌ "Diversos autores concordam"
     ✅ "Silva et al. (2023), Santos (2022) e Oliveira & Costa (2024) convergem quanto à eficácia de 78-85%"
+
+    ❌ "Baseado no arquivo dashboard.tsx obtivemos..." 
+    ✅ "A implementação do painel administrativo resultou em..."
+    
+    ❌ "Como observado em components/chart.tsx..."
+    ✅ "O componente de visualização desenvolvido..."
 
     FLUXO E APRESENTAÇÃO:
     • INÍCIO LIMPO: Comece com título centralizado e bem formatado
