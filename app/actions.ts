@@ -38,6 +38,7 @@ interface ArticleData {
   statisticalAnalysis: string
   authors: Author[]
   literatureSuggestions: LiteratureSuggestion[]
+  chartIds?: string[]
   userId?: string
 }
 

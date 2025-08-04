@@ -293,7 +293,15 @@ export default function GeneratorPage() {
         includeCharts: formData.generateGraphics,
         chartIds: chartIds.length > 0 ? chartIds : undefined,
         includeTables: formData.hasCollectedData,
-        authors: [],
+        authors: user ? [{
+          id: "1",
+          name: user.name || "",
+          institution: user.institution || "",
+          email: user.email || "",
+          department: user.department || "",
+          city: user.city || "",
+          country: user.country || "Brasil",
+        }] : [],
         literatureSuggestions: [],
         attachedFiles: filesData,
       }

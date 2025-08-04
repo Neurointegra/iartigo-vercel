@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { GeminiService } from '@/lib/services/gemini.service'
 import { ArticleService } from '@/lib/services/article.service'
 import { processImageTags } from '@/lib/utils/image-processor'
+import { processChartTags } from '@/lib/utils/chart-processor-ai'
 
 export async function POST(request: NextRequest) {
   try {
@@ -77,7 +78,16 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Processar tags de imagem para buscar arquivos na pasta uploads
+    // Primeiro, processar tags [CHART:] para gerar imagens com IA e converter em tags [Imagem:]
+    if (includeCharts) {
+      console.log('🔄 Processando tags de gráficos com IA...')
+      generatedContent = await processChartTags(generatedContent, {
+        title,
+        fieldOfStudy
+      })
+    }
+
+    // Depois, processar tags de imagem para buscar arquivos na pasta uploads (incluindo gráficos gerados)
     generatedContent = await processImageTags(generatedContent)
 
     // Se articleId for fornecido, atualizar o artigo existente

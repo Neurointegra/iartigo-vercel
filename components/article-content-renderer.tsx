@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import { processImageTagsClient } from '@/lib/utils/image-processor-client'
-import { Bar, Line, Pie } from 'react-chartjs-2'
 import React from 'react'
 
 interface AttachedImage {
@@ -35,53 +34,109 @@ export default function ArticleContentRenderer({
 }: ArticleContentRendererProps) {
   const [processedContent, setProcessedContent] = useState<React.ReactElement[]>([])
   const [isLoading, setIsLoading] = useState(true)
+  const [chartImages, setChartImages] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    const processChartsToImages = async () => {
+      if (attachedCharts.length > 0) {
+        try {
+          console.log('🎨 Convertendo gráficos em imagens...')
+          const response = await fetch('/api/process-charts', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ charts: attachedCharts })
+          })
+          
+          if (response.ok) {
+            const result = await response.json()
+            setChartImages(result.chartImages)
+            console.log('✅ Gráficos convertidos para imagens:', result.chartImages)
+          } else {
+            console.error('❌ Erro na conversão de gráficos')
+          }
+        } catch (error) {
+          console.error('❌ Erro ao converter gráficos:', error)
+        }
+      }
+    }
+
+    processChartsToImages()
+  }, [attachedCharts])
 
   useEffect(() => {
     const processContent = async () => {
       setIsLoading(true)
       try {
+        console.log('🔄 Iniciando processamento de conteúdo...')
+        
         // Primeiro, processar tags de imagens automaticamente da pasta uploads
         let htmlContent = await processImageTagsClient(content)
+        console.log('📸 Tags de imagem processadas')
         
         // Depois processar imagens em anexo (se houver)
-        attachedImages.forEach((image) => {
-          const imageTagPattern = new RegExp(`\\[Imagem: ${image.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g');
-          const imageHtml = `
-<div class="image-container" style="margin: 20px 0; text-align: center;">
-  <img src="${image.url}" alt="${image.name}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
-  <p style="margin: 10px 0 0 0; font-style: italic; color: #666; font-size: 14px;">${image.description || image.name}</p>
+        if (attachedImages.length > 0) {
+          console.log(`🖼️ Processando ${attachedImages.length} imagens anexadas`)
+          attachedImages.forEach((image) => {
+            const imageTagPattern = new RegExp(`\\[Imagem: ${image.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g');
+            const imageHtml = `
+<div class="image-container" style="margin: 30px 0; text-align: center;">
+  <img 
+    src="${image.url}" 
+    alt="${image.name}" 
+    style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: block; margin: 0 auto;" 
+    onLoad={() => console.log('✅ Imagem anexada carregada:', '${image.url}')}
+    onError={() => console.error('❌ Erro ao carregar imagem anexada:', '${image.url}')}
+  />
+  <p style="margin: 10px 0 0 0; font-style: italic; color: #666; font-size: 14px;">
+    ${image.description || image.name}
+  </p>
 </div>`;
-          htmlContent = htmlContent.replace(imageTagPattern, imageHtml);
-        });
+            htmlContent = htmlContent.replace(imageTagPattern, imageHtml);
+            console.log(`✅ Imagem anexada processada: ${image.name}`)
+          });
+        }
 
-        // Depois processar gráficos
+        // Processar tags de gráficos convertidos em imagens
+        console.log('📊 Processando tags de gráficos como imagens...')
+        attachedCharts.forEach((chart) => {
+          const chartImageName = chartImages[chart.id]
+          if (chartImageName) {
+            // Substituir tags [CHART:id] por tags [Imagem: chart_id.svg]
+            const chartTagPattern = new RegExp(`\\[CHART:${chart.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g')
+            const imageTagReplacement = `[Imagem: ${chartImageName}]`
+            htmlContent = htmlContent.replace(chartTagPattern, imageTagReplacement)
+            console.log(`🔄 Convertido [CHART:${chart.id}] para [Imagem: ${chartImageName}]`)
+          }
+        })
+
+        // Processar novamente as imagens para incluir os gráficos convertidos
+        htmlContent = await processImageTagsClient(htmlContent)
+        console.log('📸 Tags de gráfico-imagem processadas')
+
+        // Dividir conteúdo para renderização
         const parts = htmlContent.split(/(\[CHART:[^\]]+\])/)
         
         const renderedParts = parts.map((part, index) => {
-          // Verificar se é uma referência de gráfico
+          // Verificar se ainda há referências de gráfico não processadas
           const chartMatch = part.match(/\[CHART:([^\]]+)\]/)
           if (chartMatch) {
             const chartId = chartMatch[1]
             const chart = attachedCharts.find(c => c.id === chartId)
             if (chart) {
-              const ChartComponent = chart.type === 'bar' ? Bar : chart.type === 'line' ? Line : Pie
+              console.log(`⚠️ Gráfico não convertido encontrado: ${chartId} - Será exibido como placeholder`)
               return (
-                <div key={index} className="my-6">
-                  <div className="border border-gray-300 rounded-lg p-4 bg-gray-50">
-                    <h4 className="font-semibold mb-2">{chart.name}</h4>
-                    <div className="h-64 mb-2">
-                      <ChartComponent data={chart.data} options={{
-                        ...chart.data.options,
-                        responsive: true,
-                        maintainAspectRatio: false
-                      }} />
+                <div key={index} className="my-6 p-4 border-2 border-dashed border-gray-300 rounded-lg text-center bg-gray-50">
+                  <div className="text-gray-600">
+                    <div className="text-lg font-semibold mb-2">📊 {chart.name}</div>
+                    <div className="text-sm">{chart.description}</div>
+                    <div className="text-xs mt-2 text-gray-400">
+                      Gráfico {chart.type} será convertido em imagem
                     </div>
-                    <p className="text-sm text-gray-600">
-                      {chart.description}
-                    </p>
                   </div>
                 </div>
               )
+            } else {
+              console.warn(`⚠️ Gráfico não encontrado: ${chartId}`)
             }
           }
 
@@ -95,9 +150,10 @@ export default function ArticleContentRenderer({
           )
         })
 
+        console.log('✅ Processamento de conteúdo concluído')
         setProcessedContent(renderedParts)
       } catch (error) {
-        console.error('Erro ao processar conteúdo:', error)
+        console.error('❌ Erro ao processar conteúdo:', error)
         // Fallback: renderizar conteúdo original
         setProcessedContent([
           <div 

@@ -121,7 +121,7 @@ export default function DashboardPage() {
     targetJournal: "",
     fieldOfStudy: "",
     methodology: "",
-    includeCharts: false,
+    includeCharts: true,
     includeTables: false,
     researchObjectives: "",
     hypothesis: "",
@@ -143,6 +143,24 @@ export default function DashboardPage() {
       loadUserArticles()
     }
   }, [user])
+
+  // Preencher dados do usuário no primeiro autor quando disponível
+  useEffect(() => {
+    if (user && authors.length > 0 && !authors[0].name) {
+      setAuthors(prevAuthors => [
+        {
+          ...prevAuthors[0],
+          name: user.name || "",
+          institution: user.institution || "",
+          email: user.email || "",
+          department: user.department || "",
+          city: user.city || "",
+          country: user.country || "Brasil",
+        },
+        ...prevAuthors.slice(1)
+      ])
+    }
+  }, [user, authors.length])
 
   const loadUserArticles = async () => {
     try {
@@ -173,6 +191,17 @@ export default function DashboardPage() {
 
     setIsQuickGenerating(true)
     try {
+      // Criar autor padrão baseado no usuário logado
+      const defaultAuthor = {
+        id: "1",
+        name: user?.name || "",
+        institution: user?.institution || "",
+        email: user?.email || "",
+        department: user?.department || "",
+        city: user?.city || "",
+        country: user?.country || "Brasil",
+      }
+
       // Dados básicos para geração rápida
       const articleData = {
         title: quickPrompt.slice(0, 100), // Usar o prompt como título inicial
@@ -182,14 +211,15 @@ export default function DashboardPage() {
         targetJournal: "",
         fieldOfStudy: "Geral",
         methodology: "Revisão de Literatura",
-        includeCharts: false,
+        includeCharts: true,
+        chartIds: ['metodologia_processo', 'resultados_principais', 'analise_comparativa'],
         includeTables: false,
         researchObjectives: quickPrompt,
         hypothesis: "",
         sampleSize: "",
         dataCollection: "",
         statisticalAnalysis: "",
-        authors: [],
+        authors: [defaultAuthor], // Usar dados do usuário como autor principal
         literatureSuggestions: [],
         userId: user?.id
       }
@@ -257,7 +287,27 @@ export default function DashboardPage() {
   const handleGenerate = async () => {
     setIsGenerating(true)
     try {
-      const result = await generateArticle({ ...formData, authors, literatureSuggestions })
+      // Se não há autores especificados, usar dados do usuário logado
+      let finalAuthors = authors
+      if (authors.length === 0 || (authors.length === 1 && !authors[0].name)) {
+        const defaultAuthor = {
+          id: "1",
+          name: user?.name || "",
+          institution: user?.institution || "",
+          email: user?.email || "",
+          department: user?.department || "",
+          city: user?.city || "",
+          country: user?.country || "Brasil",
+        }
+        finalAuthors = [defaultAuthor]
+      }
+
+      const result = await generateArticle({ 
+        ...formData, 
+        authors: finalAuthors, 
+        literatureSuggestions,
+        chartIds: ['metodologia_detalhada', 'resultados_analise', 'discussao_comparativa']
+      })
       setGeneratedArticle(result)
     } catch (error) {
       console.error("Erro ao gerar artigo:", error)
