@@ -159,207 +159,391 @@ export default function ArticlePage() {
     });
   };
 
-  // Função para exportar para PDF
+  // Função para exportar para PDF (usando janela separada)
   const exportToPDF = async () => {
-    try {
-      // Processar conteúdo para PDF
-      let processedContent = editedContent || article?.content || '';
-      
-      // Converter tags de imagens para HTML
-      attachedImages.forEach((image) => {
-        const imageTagPattern = new RegExp(`\\[Imagem: ${image.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g');
-        const imageHtml = `
-<div class="image-container" style="margin: 20px 0; text-align: center;">
-  <img src="${image.url}" alt="${image.name}" style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);" />
-  <p style="margin: 10px 0 0 0; font-style: italic; color: #666; font-size: 14px;">${image.description || image.name}</p>
-</div>`;
-        processedContent = processedContent.replace(imageTagPattern, imageHtml);
-      });
-
-      // Converter referências de gráficos para HTML
-      attachedCharts.forEach((chart) => {
-        const chartRegex = new RegExp(`\\[CHART:${chart.referenceId}\\]`, 'g');
-        processedContent = processedContent.replace(chartRegex, `
-          <div class="chart-container" style="margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
-            <h4 style="margin: 0 0 10px 0; font-weight: bold;">${chart.name}</h4>
-            <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">${chart.description}</p>
-            <div style="background: #f5f5f5; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 12px;">
-              Gráfico: ${chart.type}<br/>
-              Dados: ${JSON.stringify(chart.data.labels?.slice(0, 5))}...
-            </div>
-          </div>
-        `);
-      });
-
-      const element = document.createElement('div');
-      element.innerHTML = `
-        <div style="padding: 40px; font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
-          <h1 style="color: #2563eb; margin-bottom: 10px; font-size: 28px;">${article?.title}</h1>
-          <p style="color: #6b7280; margin-bottom: 30px; font-size: 14px;">
-            Criado em ${article?.createdAt ? formatDate(new Date(article.createdAt)) : 'Data não disponível'}
-          </p>
-          <div style="font-size: 16px;">
-            ${processedContent}
-          </div>
-        </div>
-      `;
-      
-      document.body.appendChild(element);
-      
-      const canvas = await html2canvas(element, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true
-      });
-      
-      document.body.removeChild(element);
-      
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const imgWidth = 210;
-      const pageHeight = 295;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
-      pdf.save(`${article?.title || 'artigo'}.pdf`);
-      toast({
-        title: "PDF exportado com sucesso",
-        description: "O arquivo foi baixado para seu computador."
-      });
-    } catch (error) {
-      console.error('Erro ao exportar PDF:', error);
-      toast({
-        title: "Erro ao exportar PDF",
-        description: "Ocorreu um erro durante a exportação.",
-        variant: "destructive"
-      });
-    }
+    // Usar a mesma função principal
+    await handleDownloadPDF();
   };
 
+  // Geração de PDF usando Puppeteer no servidor
+  // Geração de PDF abrindo conteúdo em janela separada
   const handleDownloadPDF = async () => {
     if (!article) return
     
     try {
+      console.log('Abrindo artigo em janela separada para PDF...');
+      
       toast({
         title: "Gerando PDF",
-        description: "Preparando o documento para download...",
+        description: "Abrindo artigo em nova janela...",
         variant: "default",
       })
 
-      // Criar um elemento temporário com o conteúdo do artigo
-      const tempDiv = document.createElement('div')
-      tempDiv.style.position = 'absolute'
-      tempDiv.style.left = '-9999px'
-      tempDiv.style.width = '210mm' // A4 width
-      tempDiv.style.padding = '20mm'
-      tempDiv.style.fontFamily = 'Arial, sans-serif'
-      tempDiv.style.fontSize = '12px'
-      tempDiv.style.lineHeight = '1.6'
-      tempDiv.style.color = '#000'
-      tempDiv.style.background = '#fff'
-
-      // Estrutura do PDF
-      tempDiv.innerHTML = `
-        <div style="text-align: center; margin-bottom: 30px;">
-          <h1 style="font-size: 18px; font-weight: bold; margin-bottom: 10px;">${article.title}</h1>
-          <p style="font-size: 12px; color: #666;">
-            ${article.authors.map(author => `${author.name} (${author.institution})`).join(', ')}
-          </p>
-          <p style="font-size: 10px; color: #888; margin-top: 10px;">
-            Gerado em: ${formatDate(new Date())} | 
-            Revista: ${article.targetJournal || 'Não especificada'} | 
-            Estilo: ${article.citationStyle || 'ABNT'}
-          </p>
-        </div>
-
-        ${article.keywords ? `
-          <div style="margin: 30px 0; padding: 20px; background: #f1f5f9; border-radius: 10px; border: 1px solid #e2e8f0;">
-            <h2 style="font-size: 16px; font-weight: bold; margin-bottom: 15px; color: #475569; display: flex; align-items: center;">
-              <span style="margin-right: 8px;">🏷️</span> Palavras-chave
-            </h2>
-            <p style="margin: 0; font-size: 15px; color: #64748b; line-height: 1.6;">${article.keywords}</p>
-          </div>
-        ` : ''}
-
-        <div style="margin: 50px 0 40px 0;">
-          <h2 style="font-size: 20px; font-weight: bold; margin-bottom: 30px; color: #1e293b; padding-bottom: 10px; border-bottom: 3px solid #3b82f6; display: flex; align-items: center;">
-            <span style="margin-right: 10px;">📖</span> Conteúdo do Artigo
-          </h2>
-          <div style="text-align: justify; white-space: pre-wrap; line-height: 1.8; font-size: 16px; color: #374151; margin-top: 30px;">${await processArticleContent(article.content)}</div>
-        </div>
-
-        <div style="margin-top: 40px; border-top: 1px solid #ccc; padding-top: 20px; font-size: 10px; color: #666;">
-          <p>Documento gerado pelo iArtigo - Plataforma de Geração de Artigos Científicos com IA</p>
-          <p>Data de criação: ${formatDate(article.createdAt)} | Última atualização: ${formatDate(article.updatedAt)}</p>
-        </div>
-      `
-
-      document.body.appendChild(tempDiv)
-
-      // Capturar o elemento como canvas
-      const canvas = await html2canvas(tempDiv, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        width: tempDiv.scrollWidth,
-        height: tempDiv.scrollHeight
-      })
-
-      // Remover elemento temporário
-      document.body.removeChild(tempDiv)
-
-      // Criar PDF
-      const imgData = canvas.toDataURL('image/png')
-      const pdf = new jsPDF('p', 'mm', 'a4')
+      // Processar conteúdo
+      let processedContent = editedContent || article.content || '';
       
-      const imgWidth = 210 // A4 width in mm
-      const pageHeight = 295 // A4 height in mm
-      const imgHeight = (canvas.height * imgWidth) / canvas.width
-      let heightLeft = imgHeight
+      // Substituir tags de imagens
+      attachedImages.forEach((image) => {
+        const imageTagPattern = new RegExp(`\\[Imagem: ${image.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g');
+        const imageHtml = `
+          <div style="margin: 20px 0; text-align: center; page-break-inside: avoid; border: 1px solid #ddd; padding: 15px; border-radius: 8px; background: #f9f9f9;">
+            <p style="margin: 0; font-weight: bold; color: #333;">📷 ${image.description || image.name}</p>
+            <p style="margin: 5px 0 0 0; font-size: 12px; color: #666;">Arquivo: ${image.name}</p>
+          </div>
+        `;
+        processedContent = processedContent.replace(imageTagPattern, imageHtml);
+      });
 
-      let position = 0
+      // Substituir tags de gráficos
+      attachedCharts.forEach((chart) => {
+        const chartRegex = new RegExp(`\\[CHART:${chart.referenceId}\\]`, 'g');
+        const chartHtml = `
+          <div style="margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px; page-break-inside: avoid; background: #f8f9fa;">
+            <h4 style="margin: 0 0 10px 0; font-weight: bold; color: #2563eb;">📊 ${chart.name}</h4>
+            <p style="margin: 0 0 15px 0; color: #666; font-size: 14px;">${chart.description}</p>
+            <div style="background: #e9ecef; padding: 15px; border-radius: 4px; font-family: monospace; font-size: 12px; color: #495057;">
+              Tipo: ${chart.type}<br/>
+              Dados: ${JSON.stringify(chart.data.labels?.slice(0, 5))}...
+            </div>
+          </div>
+        `;
+        processedContent = processedContent.replace(chartRegex, chartHtml);
+      });
 
-      // Adicionar primeira página
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-      heightLeft -= pageHeight
+      // HTML completo para a janela
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html lang="pt-BR">
+        <head>
+          <meta charset="UTF-8">
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          <title>${article.title}</title>
+          <style>
+            * {
+              margin: 0;
+              padding: 0;
+              box-sizing: border-box;
+            }
+            
+            body {
+              font-family: 'Arial', sans-serif;
+              line-height: 1.6;
+              color: #333;
+              padding: 30px;
+              background: #fff;
+              font-size: 14px;
+              max-width: 800px;
+              margin: 0 auto;
+            }
+            
+            .header {
+              text-align: center;
+              margin-bottom: 30px;
+              padding-bottom: 20px;
+              border-bottom: 2px solid #2563eb;
+              page-break-after: avoid;
+            }
+            
+            .title {
+              font-size: 28px;
+              font-weight: bold;
+              color: #2563eb;
+              margin-bottom: 15px;
+              word-wrap: break-word;
+              page-break-after: avoid;
+            }
+            
+            .date {
+              font-size: 14px;
+              color: #666;
+              page-break-after: avoid;
+            }
+            
+            .content {
+              font-size: 16px;
+              line-height: 1.8;
+              text-align: justify;
+              word-wrap: break-word;
+              overflow-wrap: break-word;
+              hyphens: auto;
+            }
+            
+            h1, h2, h3, h4, h5, h6 {
+              margin: 25px 0 15px 0;
+              color: #2563eb;
+              page-break-after: avoid;
+              orphans: 3;
+              widows: 3;
+            }
+            
+            p {
+              margin: 15px 0;
+              page-break-inside: avoid;
+              orphans: 3;
+              widows: 3;
+            }
+            
+            strong, b {
+              font-weight: bold;
+            }
+            
+            em, i {
+              font-style: italic;
+            }
+            
+            ul, ol {
+              margin: 15px 0;
+              padding-left: 30px;
+              page-break-inside: avoid;
+            }
+            
+            li {
+              margin: 8px 0;
+              page-break-inside: avoid;
+            }
+            
+            .no-break {
+              page-break-inside: avoid;
+            }
+            
+            /* Controles de impressão */
+            @page {
+              margin: 20mm;
+              size: A4;
+            }
+            
+            @media print {
+              body {
+                padding: 0;
+                margin: 0;
+                font-size: 12pt;
+              }
+              
+              .header {
+                margin-bottom: 20px;
+              }
+              
+              .title {
+                font-size: 18pt;
+              }
+              
+              p, div {
+                orphans: 3;
+                widows: 3;
+              }
+            }
 
-      // Adicionar páginas adicionais se necessário
-      while (heightLeft >= 0) {
-        position = heightLeft - imgHeight
-        pdf.addPage()
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight)
-        heightLeft -= pageHeight
+            /* Botão para gerar PDF */
+            .pdf-button {
+              position: fixed;
+              top: 20px;
+              right: 20px;
+              background: #2563eb;
+              color: white;
+              padding: 12px 24px;
+              border: none;
+              border-radius: 8px;
+              cursor: pointer;
+              font-size: 14px;
+              font-weight: bold;
+              box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+              z-index: 1000;
+            }
+            
+            .pdf-button:hover {
+              background: #1d4ed8;
+            }
+
+            @media print {
+              .pdf-button {
+                display: none;
+              }
+            }
+          </style>
+        </head>
+        <body>
+          <button class="pdf-button" onclick="window.print()">🖨️ Gerar PDF</button>
+          
+          <div class="header no-break">
+            <h1 class="title">${article.title}</h1>
+            <p class="date">Criado em: ${formatDate(article.createdAt)}</p>
+          </div>
+          
+          <div class="content">
+            ${processedContent}
+          </div>
+
+          <script>
+            // Focar na janela para garantir que está ativa
+            window.focus();
+            
+            // Aguardar carregamento completo e mostrar botão
+            window.addEventListener('load', function() {
+              console.log('Janela carregada - Clique no botão "Gerar PDF" ou use Ctrl+P');
+            });
+          </script>
+        </body>
+        </html>
+      `;
+
+      // Abrir nova janela com o conteúdo
+      const newWindow = window.open('', '_blank', 'width=900,height=700,scrollbars=yes,resizable=yes');
+      
+      if (!newWindow) {
+        throw new Error('Popup bloqueado. Permita popups para este site.');
       }
 
-      // Fazer o download
-      const filename = `${article.title.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 50)}.pdf`
-      pdf.save(filename)
+      // Escrever conteúdo na nova janela
+      newWindow.document.write(htmlContent);
+      newWindow.document.close();
+
+      // Focar na nova janela
+      newWindow.focus();
+
+      console.log('Nova janela aberta com sucesso');
 
       toast({
-        title: "PDF gerado com sucesso!",
-        description: "O download do arquivo foi iniciado.",
-        variant: "default",
-      })
+        title: "Janela de PDF aberta!",
+        description: "Clique no botão 'Gerar PDF' na nova janela ou use Ctrl+P",
+      });
 
     } catch (error) {
-      console.error('Erro ao gerar PDF:', error)
+      console.error('Erro ao abrir janela para PDF:', error);
       toast({
-        title: "Erro ao gerar PDF",
-        description: "Ocorreu um erro ao gerar o documento. Tente novamente.",
+        title: "Erro ao abrir janela",
+        description: `${error instanceof Error ? error.message : 'Erro desconhecido'}`,
         variant: "destructive",
-      })
+      });
     }
+  }
+
+  // Método de fallback usando html2canvas com melhor controle de páginas
+  const handleDownloadPDFFallback = async () => {
+    if (!article) return
+    
+    // Processar conteúdo
+    let processedContent = editedContent || article.content || '';
+    
+    // Substituir tags de imagens
+    attachedImages.forEach((image) => {
+      const imageTagPattern = new RegExp(`\\[Imagem: ${image.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]`, 'g');
+      const imageText = `\n\n[FIGURA: ${image.description || image.name}]\n\n`;
+      processedContent = processedContent.replace(imageTagPattern, imageText);
+    });
+
+    // Substituir tags de gráficos
+    attachedCharts.forEach((chart) => {
+      const chartRegex = new RegExp(`\\[CHART:${chart.referenceId}\\]`, 'g');
+      const chartText = `\n\n[GRÁFICO: ${chart.name} - ${chart.description}]\n\n`;
+      processedContent = processedContent.replace(chartRegex, chartText);
+    });
+
+    // Criar elemento temporário
+    const element = document.createElement('div');
+    element.style.position = 'fixed';
+    element.style.top = '0';
+    element.style.left = '0';
+    element.style.width = '210mm'; // Largura A4
+    element.style.maxWidth = '210mm';
+    element.style.padding = '20mm';
+    element.style.fontFamily = 'Arial, sans-serif';
+    element.style.fontSize = '14px';
+    element.style.lineHeight = '1.6';
+    element.style.color = '#000';
+    element.style.backgroundColor = '#fff';
+    element.style.zIndex = '-1000';
+    element.style.boxSizing = 'border-box';
+    element.style.wordWrap = 'break-word';
+    element.style.overflowWrap = 'break-word';
+
+    element.innerHTML = `
+      <div style="text-align: center; margin-bottom: 25px; padding-bottom: 15px; border-bottom: 2px solid #2563eb;">
+        <h1 style="color: #2563eb; font-size: 22px; margin-bottom: 10px; font-weight: bold; word-wrap: break-word;">${article.title}</h1>
+        <p style="color: #666; font-size: 12px; margin: 0;">
+          Criado em: ${formatDate(article.createdAt)}
+        </p>
+      </div>
+      <div style="line-height: 1.7; text-align: justify; word-wrap: break-word; overflow-wrap: break-word;">
+        ${processedContent.replace(/\n/g, '<br>')}
+      </div>
+    `;
+    
+    document.body.appendChild(element);
+
+    // Aguardar renderização
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Capturar com html2canvas
+    const canvas = await html2canvas(element, {
+      scale: 1.5, // Reduzir scale para evitar problemas de memória
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      width: element.scrollWidth,
+      height: element.scrollHeight,
+      windowWidth: element.scrollWidth,
+      windowHeight: element.scrollHeight,
+      foreignObjectRendering: true
+    });
+    
+    document.body.removeChild(element);
+
+    // Criar PDF com controle inteligente de páginas
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pdfWidth = 210; // A4 width
+    const pdfHeight = 297; // A4 height
+    const margin = 20; // Margem
+    const contentWidth = pdfWidth - (2 * margin);
+    const contentHeight = pdfHeight - (2 * margin);
+    
+    // Calcular dimensões da imagem
+    const imgWidth = contentWidth;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+    
+    const imgData = canvas.toDataURL('image/png', 0.85); // Qualidade 85%
+    
+    if (imgHeight <= contentHeight) {
+      // Cabe em uma página
+      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight);
+    } else {
+      // Múltiplas páginas com melhor divisão
+      let currentY = 0;
+      let pageCount = 0;
+      
+      while (currentY < imgHeight) {
+        if (pageCount > 0) {
+          pdf.addPage();
+        }
+        
+        // Calcular quanto da imagem pode caber na página atual
+        const remainingHeight = imgHeight - currentY;
+        const pageContentHeight = Math.min(contentHeight, remainingHeight);
+        
+        // Adicionar a parte da imagem correspondente a esta página
+        pdf.addImage(
+          imgData, 
+          'PNG', 
+          margin, 
+          margin - currentY, 
+          imgWidth, 
+          imgHeight
+        );
+        
+        currentY += contentHeight;
+        pageCount++;
+        
+        console.log(`Página ${pageCount} criada - Y: ${currentY}/${imgHeight}`);
+      }
+    }
+
+    const filename = `${article.title.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_')}.pdf`;
+    pdf.save(filename);
+
+    toast({
+      title: "PDF gerado com método alternativo",
+      description: "Arquivo baixado usando html2canvas com melhor paginação.",
+    });
   }
 
   const handleShare = () => {
