@@ -61,6 +61,16 @@ interface ArticleGenerationParams {
     imageUrl?: string // URL da imagem salva
     description?: string // Descrição da imagem para a IA
   }>
+  includeCharts?: boolean
+  chartIds?: string[] // IDs específicos dos gráficos a serem usados
+  attachedCharts?: Array<{
+    id: string
+    name: string
+    type: 'bar' | 'line' | 'pie' | 'scatter'
+    data: any
+    description: string
+    referenceId: string
+  }>
   includeTables?: boolean
 }
 
@@ -167,6 +177,534 @@ export class GeminiService {
     console.log(`✅ Seção '${sectionType}' gerada em ${duration}ms`)
     
     return result
+  }
+
+  /**
+   * Analisa dados fornecidos pelo usuário e gera informações para gráficos
+   */
+  static async analyzeDataForCharts(
+    dataContent: string,
+    context: string = "",
+    fileName: string = ""
+  ): Promise<{
+    success: boolean
+    charts: Array<{
+      id: string
+      name: string
+      type: 'bar' | 'line' | 'pie' | 'scatter'
+      data: any
+      description: string
+      analysisContext: string
+    }>
+    error?: string
+  }> {
+    console.log('📊 Iniciando análise de dados para geração de gráficos...')
+    console.log(`📄 Arquivo: ${fileName}`)
+    console.log(`📝 Contexto: ${context}`)
+    console.log(`📋 Tamanho dos dados: ${dataContent.length} caracteres`)
+
+    try {
+      const result = await this.withRetry(async () => {
+        const model = genAI.getGenerativeModel({ 
+          model: 'gemini-2.0-flash-exp',
+          generationConfig: {
+            temperature: 0.3,
+            topP: 0.8,
+            topK: 20,
+            maxOutputTokens: 2048,
+            responseMimeType: "application/json",
+          }
+        })
+
+        const analysisPrompt = `
+Você é um especialista em análise de dados e visualização científica. Analise CRITERIOSAMENTE os dados fornecidos e identifique apenas os gráficos que fazem SENTIDO CIENTÍFICO.
+
+DADOS FORNECIDOS:
+\`\`\`
+${dataContent.substring(0, 3000)}${dataContent.length > 3000 ? '\n...(dados truncados)' : ''}
+\`\`\`
+
+ARQUIVO: ${fileName}
+CONTEXTO: ${context || 'Artigo científico'}
+
+CRITÉRIOS PARA ANÁLISE:
+1. 🔍 Identifique dados numéricos ou categóricos nos arquivos fornecidos
+2. 📊 Sugira gráficos apenas se houver dados estruturados suficientes
+3. 🎯 Quantidade flexível: 1-3 gráficos conforme valor agregado aos dados
+4. ✅ Use dados que estão claramente presentes no arquivo
+5. 🧭 Priorize qualidade sobre quantidade - melhor poucos gráficos relevantes
+
+QUANDO SUGERIR CADA TIPO:
+- "bar": Comparar categorias/grupos (ex: experimental vs controle, por faixa etária)
+- "line": Tendências temporais ou sequenciais (ex: evolução ao longo do tempo)
+- "pie": Distribuições percentuais (ex: proporção por categoria, até 6 fatias)
+- "scatter": Correlações entre duas variáveis contínuas (ex: idade vs pontuação)
+
+FORMATO DE RESPOSTA (JSON válido):
+{
+  "charts": [
+    {
+      "id": "id_descritivo_especifico",
+      "name": "Título Específico e Científico",
+      "type": "bar|line|pie|scatter",
+      "data": {
+        "labels": ["categoria_específica_1", "categoria_específica_2"],
+        "values": [valor_real_1, valor_real_2],
+        "unit": "unidade_medida" // ex: "anos", "kg", "%", "pessoas"
+      },
+      "description": "O que EXATAMENTE este gráfico mostra e por que é relevante",
+      "analysisContext": "Insight científico específico extraído destes dados"
+    }
+  ]
+}
+
+REGRAS IMPORTANTES:
+❌ NÃO invente dados que não existem no arquivo
+❌ NÃO use labels extremamente genéricos como "Item 1", "Categoria A"
+❌ NÃO force quantidade específica - prefira qualidade
+✅ EXTRAIA dados reais do conteúdo fornecido
+✅ USE nomes descritivos baseados no contexto
+✅ INCLUA unidades quando identificáveis
+✅ SEJA específico mas realista
+✅ GERE apenas gráficos que realmente agregam valor
+
+FLEXIBILIDADE PERMITIDA:
+- Pode agrupar dados similares para formar categorias
+- Pode calcular médias, totais ou proporções dos dados
+- Pode interpretar dados de diferentes formatos (CSV, JSON, texto)
+- Pode usar sinônimos ou termos relacionados para labels
+
+EXEMPLO DE DADOS VÁLIDOS:
+{"labels": ["Grupo Controle", "Grupo Experimental"], "values": [23.5, 31.2], "unit": "média (pontos)"}
+
+SE OS DADOS NÃO SUPORTAREM GRÁFICOS VÁLIDOS, retorne: {"charts": []}
+        `
+
+        const result = await model.generateContent(analysisPrompt)
+        const response = await result.response
+        const text = response.text().trim()
+
+        // Tentar extrair JSON da resposta
+        let jsonData
+        try {
+          // Procurar por JSON válido na resposta
+          const jsonMatch = text.match(/\{[\s\S]*\}/)
+          if (jsonMatch) {
+            jsonData = JSON.parse(jsonMatch[0])
+          } else {
+            jsonData = JSON.parse(text)
+          }
+        } catch (parseError) {
+          console.error('❌ Erro ao fazer parse do JSON:', parseError)
+          console.log('📄 Resposta da IA:', text)
+          throw new Error('Resposta da IA não é um JSON válido')
+        }
+
+        // Validar estrutura
+        if (!jsonData.charts || !Array.isArray(jsonData.charts)) {
+          throw new Error('Estrutura de resposta inválida - charts não encontrado')
+        }
+
+        // Validar cada gráfico com critérios rigorosos
+        const validCharts = jsonData.charts.filter((chart: any) => {
+          // Validação básica de estrutura
+          if (!chart.id || !chart.name || !chart.type || !chart.data || !chart.description) {
+            console.warn('⚠️ Gráfico rejeitado: estrutura incompleta:', chart)
+            return false
+          }
+
+          // Validação de tipos permitidos
+          const allowedTypes = ['bar', 'line', 'pie', 'scatter']
+          if (!allowedTypes.includes(chart.type)) {
+            console.warn('⚠️ Gráfico rejeitado: tipo inválido:', chart.type)
+            return false
+          }
+
+          // Validação específica por tipo (mais flexível)
+          if (chart.type === 'bar' || chart.type === 'line') {
+            if (!chart.data.labels || !chart.data.values || 
+                !Array.isArray(chart.data.labels) || !Array.isArray(chart.data.values) ||
+                chart.data.labels.length < 2 || chart.data.values.length < 2) {
+              console.warn('⚠️ Gráfico bar/line rejeitado: dados insuficientes:', chart)
+              return false
+            }
+            // Permitir pequenas discrepâncias no tamanho dos arrays
+            if (Math.abs(chart.data.labels.length - chart.data.values.length) > 1) {
+              console.warn('⚠️ Gráfico bar/line rejeitado: arrays inconsistentes:', chart)
+              return false
+            }
+          }
+
+          if (chart.type === 'pie') {
+            if (!chart.data.labels || !chart.data.values || 
+                !Array.isArray(chart.data.labels) || !Array.isArray(chart.data.values) ||
+                chart.data.labels.length < 2 || chart.data.values.length < 2 ||
+                chart.data.labels.length > 8) { // Máximo 8 fatias
+              console.warn('⚠️ Gráfico pie rejeitado: dados inadequados:', chart)
+              return false
+            }
+          }
+
+          // Validar que valores são numéricos
+          if (chart.data.values && Array.isArray(chart.data.values)) {
+            const hasValidNumbers = chart.data.values.every((val: any) => 
+              typeof val === 'number' && !isNaN(val) && isFinite(val)
+            )
+            if (!hasValidNumbers) {
+              console.warn('⚠️ Gráfico rejeitado: valores não numéricos válidos:', chart)
+              return false
+            }
+          }
+
+          // Validar que não tem labels extremamente genéricos (mais flexível)
+          if (chart.data.labels && Array.isArray(chart.data.labels)) {
+            const veryGenericLabels = chart.data.labels.filter((label: string) => 
+              /^(item|categoria|elemento|grupo)\s*[0-9]+$/i.test(label?.toString() || '') ||
+              /^(a|b|c|d|e|f)$/i.test(label?.toString() || '')
+            )
+            // Rejeitar apenas se TODOS os labels forem genéricos
+            if (veryGenericLabels.length === chart.data.labels.length && chart.data.labels.length > 1) {
+              console.warn('⚠️ Gráfico rejeitado: todos os labels são extremamente genéricos:', chart)
+              return false
+            }
+          }
+
+          // Validar que nome não é extremamente genérico (mais flexível para IDs aleatórios)
+          if (/^(gráfico|chart|análise|dados?)\s*(de\s*)?dados?$/i.test(chart.name) ||
+              /^(gráfico|chart)\s*[0-9]+$/i.test(chart.name)) {
+            console.warn('⚠️ Gráfico rejeitado: nome muito genérico:', chart.name)
+            return false
+          }
+
+          console.log('✅ Gráfico validado:', chart.id)
+          return true
+        })
+
+        if (validCharts.length === 0) {
+          throw new Error('Nenhum gráfico válido foi gerado pela análise')
+        }
+
+        // Aplicar validação de relevância (mais flexível)
+        const contextuallyValidCharts = validCharts.filter((chart: any) => {
+          const relevanceCheck = this.validateChartRelevance(chart, dataContent, context)
+          if (!relevanceCheck.isValid) {
+            console.warn(`ℹ️ Gráfico com baixa relevância mantido: ${chart.id} - ${relevanceCheck.reason}`)
+            // Manter gráfico mesmo com baixa relevância, apenas logar o aviso
+          }
+          return true // Aceitar todos os gráficos que passaram na validação estrutural
+        })
+
+        if (contextuallyValidCharts.length === 0) {
+          console.warn('⚠️ Todos os gráficos foram rejeitados por falta de relevância')
+          return { charts: [] }
+        }
+
+        console.log(`✅ Análise concluída: ${contextuallyValidCharts.length} gráficos válidos e relevantes`)
+        return { charts: contextuallyValidCharts }
+
+      }, 2, 2000)
+
+      return {
+        success: true,
+        charts: result.charts
+      }
+
+    } catch (error) {
+      console.error('❌ Erro na análise de dados:', error)
+      return {
+        success: false,
+        charts: [],
+        error: error instanceof Error ? error.message : 'Erro desconhecido na análise de dados'
+      }
+    }
+  }
+
+  /**
+   * Gera SVG baseado na análise de dados da IA
+   */
+  static async generateDataDrivenSVG(
+    chart: {
+      id: string
+      name: string
+      type: 'bar' | 'line' | 'pie' | 'scatter'
+      data: any
+      description: string
+      analysisContext: string
+    },
+    width: number = 1200,
+    height: number = 800
+  ): Promise<{
+    success: boolean
+    svgContent?: string
+    error?: string
+  }> {
+    console.log(`🎨 Gerando SVG baseado em dados para: ${chart.id}`)
+
+    try {
+      const result = await this.withRetry(async () => {
+        const model = genAI.getGenerativeModel({ 
+          model: 'gemini-2.0-flash-exp',
+          generationConfig: {
+            temperature: 0.1,
+            topP: 0.8,
+            topK: 10,
+            maxOutputTokens: 3000,
+            responseMimeType: "text/plain",
+          }
+        })
+
+        const svgPrompt = `
+Você é um especialista em SVG e visualização científica. Gere um gráfico SVG PROFISSIONAL e PRECISO baseado EXCLUSIVAMENTE nos dados analisados.
+
+INFORMAÇÕES DO GRÁFICO:
+- ID: ${chart.id}
+- Nome: ${chart.name}
+- Tipo: ${chart.type}
+- Descrição: ${chart.description}
+- Contexto: ${chart.analysisContext}
+
+DADOS REAIS PARA PLOTAR:
+${JSON.stringify(chart.data, null, 2)}
+
+ESPECIFICAÇÕES TÉCNICAS OBRIGATÓRIAS:
+- Dimensões: ${width}x${height} pixels
+- Fundo: Branco (#FFFFFF)
+- Paleta: Azul científico (#2563EB), Verde (#059669), Vermelho (#DC2626), Laranja (#F59E0B), Roxo (#7C3AED)
+- Fonte: "Arial", sans-serif
+- Margens: 80px topo/lateral, 100px inferior para labels
+
+INSTRUÇÕES CRÍTICAS POR TIPO:
+
+📊 GRÁFICO DE BARRAS (bar):
+- Barras verticais, largura proporcional ao espaço disponível
+- Altura das barras EXATAMENTE proporcional aos valores
+- Eixo Y com escala precisa (0 até valor máximo + 10%)
+- Labels do eixo X rotacionados se necessário
+- Valores numéricos no topo de cada barra
+- Grid horizontal sutil para referência
+
+📈 GRÁFICO DE LINHA (line):
+- Linha contínua conectando pontos na sequência exata
+- Pontos circulares marcados (raio 4px)
+- Eixos X e Y com escalas proporcionais aos dados
+- Grid discreto para melhor leitura
+- Valores nos pontos quando espaço permitir
+
+🥧 GRÁFICO DE PIZZA (pie):
+- Fatias EXATAMENTE proporcionais aos valores percentuais
+- Início às 12h (topo), sentido horário
+- Labels externos com linhas conectoras
+- Percentuais dentro das fatias (se >5%) ou na legenda
+- Cores alternadas da paleta
+
+🔷 GRÁFICO DE DISPERSÃO (scatter):
+- Pontos plotados nas coordenadas X,Y exatas
+- Eixos com escalas apropriadas aos dados
+- Grid para facilitar leitura
+- Pontos destacados (raio 5px, borda mais escura)
+
+ELEMENTOS OBRIGATÓRIOS EM TODO SVG:
+1. 📝 Título centralizado (font-size: 20px, font-weight: bold)
+2. 📏 Eixos com labels descritivos e unidades
+3. 📊 Escala numérica precisa e proporcional
+4. 🎨 Cores consistentes da paleta definida
+5. 📐 Grid de referência sutil (#F3F4F6)
+6. 🏷️ Legenda quando necessário
+
+VALIDAÇÃO FINAL OBRIGATÓRIA:
+- Todos os valores dos dados estão representados?
+- As proporções estão matematicamente corretas?
+- Os labels são legíveis e não se sobrepõem?
+- O título descreve exatamente o que é mostrado?
+
+FORMATO DE RESPOSTA:
+Retorne APENAS o código SVG válido e completo.
+Inicie com <svg e termine com </svg>
+NÃO adicione comentários, explicações ou markdown.
+
+🚫 PROIBIÇÕES CRÍTICAS:
+- NUNCA use elementos <script> ou JavaScript
+- NUNCA use loops (for, while) ou funções
+- NUNCA use document.write ou métodos DOM
+- Gere TODOS os elementos SVG estaticamente
+- Use apenas tags SVG válidas: <rect>, <circle>, <line>, <path>, <text>, <g>
+
+TEMPLATE ESTRUTURAL RESPONSIVO:
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#FFFFFF"/>
+  <defs>
+    <style>
+      .title { font: bold 20px Arial, sans-serif; fill: #1F2937; }
+      .axis-label { font: 14px Arial, sans-serif; fill: #374151; }
+      .data-label { font: 12px Arial, sans-serif; fill: #6B7280; }
+      .grid-line { stroke: #F3F4F6; stroke-width: 1; }
+    </style>
+  </defs>
+  
+  <text x="${width/2}" y="35" text-anchor="middle" class="title">${chart.name}</text>
+  
+  <!-- GERE TODOS OS ELEMENTOS DIRETAMENTE - NÃO USE JAVASCRIPT -->
+  <!-- Para múltiplos elementos similares, repita as tags manualmente -->
+  <!-- Exemplo de barras: <rect x="10" y="20" width="30" height="40" fill="#2563EB"/> -->
+  <!-- Exemplo de texto: <text x="25" y="15" text-anchor="middle" class="data-label">Valor</text> -->
+  
+</svg>
+
+⚠️ OBRIGATÓRIO: 
+1. SEMPRE incluir viewBox="0 0 ${width} ${height}" para responsividade
+2. Verifique que TODOS os valores dos dados estão plotados corretamente
+3. Use APENAS elementos SVG estáticos - NÃO use JavaScript
+4. Repita manualmente elementos similares ao invés de usar loops
+5. O SVG deve ser responsivo e escalar proporcionalmente
+        `
+
+        const result = await model.generateContent(svgPrompt)
+        const response = await result.response
+        let svgContent = response.text().trim()
+
+        // Limpar possíveis markdown ou prefixos
+        if (svgContent.includes('```')) {
+          const svgMatch = svgContent.match(/```(?:svg)?\s*\n?([\s\S]*?)\n?```/)
+          if (svgMatch) {
+            svgContent = svgMatch[1].trim()
+          }
+        }
+
+        // Verificar se é SVG válido e bem formado
+        if (!svgContent.startsWith('<svg') || !svgContent.endsWith('</svg>')) {
+          throw new Error('SVG gerado não é válido: deve começar com <svg e terminar com </svg>')
+        }
+
+        // Validações adicionais de qualidade do SVG
+        const svgValidations = [
+          { test: () => svgContent.includes('width='), error: 'SVG deve ter atributo width' },
+          { test: () => svgContent.includes('height='), error: 'SVG deve ter atributo height' },
+          { test: () => svgContent.includes('viewBox='), error: 'SVG deve ter atributo viewBox para responsividade' },
+          { test: () => svgContent.includes('xmlns='), error: 'SVG deve ter namespace xmlns' },
+          { test: () => svgContent.includes('<text'), error: 'SVG deve conter elementos de texto' },
+          { test: () => !svgContent.includes('<Chart'), error: 'SVG contém tag inválida <Chart>' },
+          { test: () => !svgContent.includes('[CHART'), error: 'SVG contém tag de placeholder [CHART]' },
+          { test: () => !svgContent.includes('<script'), error: 'SVG não deve conter elementos <script>' },
+          { test: () => !svgContent.includes('document.'), error: 'SVG não deve conter código JavaScript' },
+          { test: () => !svgContent.includes('for ('), error: 'SVG não deve conter loops JavaScript' },
+          { test: () => !svgContent.includes('function'), error: 'SVG não deve conter funções JavaScript' }
+        ]
+
+        for (const validation of svgValidations) {
+          if (!validation.test()) {
+            // Se viewBox está faltando, tentar adicionar automaticamente
+            if (validation.error.includes('viewBox')) {
+              console.warn('⚠️ ViewBox ausente, adicionando automaticamente...')
+              const widthMatch = svgContent.match(/width="(\d+)"/)
+              const heightMatch = svgContent.match(/height="(\d+)"/)
+              
+              if (widthMatch && heightMatch) {
+                const w = widthMatch[1]
+                const h = heightMatch[1]
+                svgContent = svgContent.replace(
+                  '<svg',
+                  `<svg viewBox="0 0 ${w} ${h}"`
+                )
+                continue // Pular erro se conseguiu corrigir
+              }
+            }
+            throw new Error(`SVG inválido: ${validation.error}`)
+          }
+        }
+
+        // Verificar balanceamento básico de tags principais
+        const mainTags = ['<svg', '<rect', '<text', '<circle', '<line', '<path', '<g']
+        for (const tag of mainTags) {
+          const openCount = (svgContent.match(new RegExp(tag, 'g')) || []).length
+          const closeTag = tag.replace('<', '</')
+          const closeCount = (svgContent.match(new RegExp(closeTag, 'g')) || []).length
+          
+          // Para tags auto-fechantes, permitir diferença
+          if (tag !== '<rect' && tag !== '<circle' && tag !== '<line' && openCount !== closeCount && openCount > 0) {
+            console.warn(`⚠️ Possível desbalanceamento em ${tag}: ${openCount} aberto(s), ${closeCount} fechado(s)`)
+          }
+        }
+
+        // Verificar se o título do gráfico está presente no SVG
+        if (!svgContent.includes(chart.name.substring(0, 20))) {
+          console.warn('⚠️ Aviso: Título do gráfico pode não estar presente no SVG')
+        }
+
+        console.log(`✅ SVG gerado para ${chart.id}: ${svgContent.length} caracteres`)
+        return { svgContent }
+
+      }, 2, 1500)
+
+      return {
+        success: true,
+        svgContent: result.svgContent
+      }
+
+    } catch (error) {
+      console.error(`❌ Erro na geração de SVG para ${chart.id}:`, error)
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Erro desconhecido na geração de SVG'
+      }
+    }
+  }
+
+  /**
+   * Valida se um gráfico faz sentido científico baseado nos dados originais
+   */
+  static validateChartRelevance(
+    chart: any,
+    originalData: string,
+    context: string
+  ): { isValid: boolean; reason?: string } {
+    try {
+      // Verificar se os dados do gráfico têm correspondência no texto original
+      const chartLabels = chart.data.labels || []
+      const chartValues = chart.data.values || []
+
+      // Validar se pelo menos 70% dos labels aparecem no texto original
+      const labelsInText = chartLabels.filter((label: string) => 
+        originalData.toLowerCase().includes(label.toLowerCase())
+      )
+      
+      if (labelsInText.length < chartLabels.length * 0.7) {
+        return { 
+          isValid: false, 
+          reason: `Labels do gráfico não encontrados nos dados originais: ${chartLabels.join(', ')}` 
+        }
+      }
+
+      // Verificar se os valores são realistas (não muito round numbers)
+      const hasOnlyRoundNumbers = chartValues.every((val: number) => val % 10 === 0)
+      if (hasOnlyRoundNumbers && chartValues.length > 2) {
+        return { 
+          isValid: false, 
+          reason: 'Valores suspeitos: todos são números redondos (possível invenção)' 
+        }
+      }
+
+      // Verificar se o contexto do gráfico está relacionado ao tema
+      const contextWords = context.toLowerCase().split(/\s+/)
+      const chartDescription = (chart.description || '').toLowerCase()
+      const hasContextRelevance = contextWords.some(word => 
+        word.length > 3 && chartDescription.includes(word)
+      )
+
+      if (!hasContextRelevance && context.length > 10) {
+        return { 
+          isValid: false, 
+          reason: 'Gráfico não parece relacionado ao contexto da pesquisa' 
+        }
+      }
+
+      return { isValid: true }
+
+    } catch (error) {
+      return { 
+        isValid: false, 
+        reason: `Erro na validação: ${error instanceof Error ? error.message : 'Erro desconhecido'}` 
+      }
+    }
   }
 
   /**
@@ -463,22 +1001,6 @@ Exemplo: "Gráfico de barras com 4 categorias (A: 25%, B: 45%, C: 70%, D: 55%). 
     // Gerar hash simples do conteúdo da imagem para cache
     const imageHash = Buffer.from(imageData.substring(0, 100)).toString('base64')
     
-    // Detectar o tipo MIME da imagem a partir dos dados base64
-    let mimeType = "image/jpeg" // padrão
-    
-    // Verificar assinatura da imagem nos primeiros bytes
-    if (imageData.startsWith('/9j/')) {
-      mimeType = "image/jpeg"
-    } else if (imageData.startsWith('iVBORw0KGgoAAAANSUhEUgAA')) {
-      mimeType = "image/png"
-    } else if (imageData.startsWith('R0lGOD')) {
-      mimeType = "image/gif"
-    } else if (imageData.includes('UklGR')) {
-      mimeType = "image/webp"
-    }
-    
-    console.log(`📸 Tipo de imagem detectado: ${mimeType}`)
-    
     // Verificar cache primeiro
     const cached = this.getCachedImageAnalysis(imageHash)
     if (cached) {
@@ -513,7 +1035,7 @@ Exemplo: "Gráfico de barras mostrando comparação de eficiência entre três m
       const imagePart = {
         inlineData: {
           data: imageData,
-          mimeType: mimeType
+          mimeType: "image/jpeg"
         }
       }
       
@@ -522,54 +1044,12 @@ Exemplo: "Gráfico de barras mostrando comparação de eficiência entre três m
       const text = response.text()
       
       return text.trim()
-    }, 2, 1000).catch((error) => {
-      console.error('❌ Erro na análise da imagem:', error)
-      return 'Imagem relacionada ao tema da pesquisa'
-    })
+    }, 2, 1000).catch(() => 'Imagem relacionada ao tema da pesquisa')
 
     // Salvar no cache
     this.setCachedImageAnalysis(imageHash, analysis)
     
     return analysis
-  }
-
-  static async generateSimpleAbstract(title: string, content: string): Promise<string> {
-    try {
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash-exp',
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.8,
-          maxOutputTokens: 300,
-        }
-      })
-
-      const prompt = `
-Crie um resumo simples e direto em português para este artigo científico:
-
-TÍTULO: ${title}
-
-CONTEÚDO:
-${content.substring(0, 2000)}...
-
-INSTRUÇÕES:
-- Entre 100-150 palavras
-- Linguagem clara e objetiva
-- Estrutura: problema/objetivo → metodologia → contribuição
-- Sem formatação, apenas texto corrido
-
-Escreva apenas o resumo:
-      `
-
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      return response.text().trim()
-
-    } catch (error) {
-      console.error('Erro ao gerar resumo:', error)
-      return `Este estudo apresenta uma análise sobre ${title.toLowerCase()}, contribuindo para o avanço do conhecimento na área através de metodologias apropriadas e resultados relevantes.`
-    }
   }
 
   static async suggestLiterature(
@@ -695,6 +1175,47 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
 ` 
       : ''
 
+    const chartsText = params.includeCharts 
+      ? `\nGRÁFICOS AUTOMÁTICOS:
+- USE TAGS ESPECIAIS: Use tags [CHART:id] para marcar onde os gráficos devem aparecer
+- PROCESSAMENTO AUTOMÁTICO: As tags serão automaticamente convertidas em imagens reais
+- QUANTIDADE FLEXÍVEL: Inclua 1-3 gráficos conforme necessário para o conteúdo
+- IDs ALEATÓRIOS: Gere IDs únicos e aleatórios (ex: chart_abc123, graph_xyz789, data_def456)
+${params.chartIds ? 
+  `- GRÁFICOS DISPONÍVEIS:
+${params.chartIds.map((id, index) => `  * Use [CHART:${id}] onde for mais apropriado contextualmente`).join('\n')}` :
+  `- EXEMPLOS DE IDs ALEATÓRIOS:
+  * [CHART:analysis_rnd847] para análises gerais
+  * [CHART:comparison_xyz123] para comparações
+  * [CHART:distribution_abc456] para distribuições`
+}
+
+INSTRUÇÕES PARA TAGS DE GRÁFICO:
+- POSICIONAMENTO: Coloque as tags [CHART:id] onde o gráfico agregue valor científico
+- CONTEXTO GENÉRICO: Refira-se ao gráfico como "ilustração", "demonstração", "visualização"
+- EVITE NOMES ESPECÍFICOS: NÃO mencione o ID do gráfico no texto do artigo
+- ANÁLISE: Sempre inclua um parágrafo de análise DEPOIS da tag
+- ESPAÇAMENTO: Use <div style="margin: 40px 0; text-align: center;">[CHART:id]</div>
+- IMPORTANTE: As tags [CHART:id] serão automaticamente convertidas em imagens reais
+
+EXEMPLO CORRETO DE REFERÊNCIA GENÉRICA:
+"A metodologia adotada seguiu um processo estruturado, conforme demonstrado na visualização a seguir.
+
+<div style="margin: 40px 0; text-align: center;">
+[CHART:process_rnd847]
+</div>
+
+A ilustração evidencia a sequência lógica das atividades, demonstrando a integração entre as diferentes fases da pesquisa."
+
+DIRETRIZES IMPORTANTES:
+- NUNCA mencione o nome/ID do gráfico no texto (ex: "chart_abc123", "gráfico process_rnd847")
+- USE termos genéricos: "a visualização", "o gráfico", "a ilustração", "a demonstração"
+- DISTRIBUA conforme necessário - não force 3 gráficos se não fizer sentido
+- CONTEXTUALIZE cada gráfico no texto ao redor sem nomear especificamente
+- As imagens serão geradas automaticamente baseadas no contexto da seção
+`
+      : ''
+
     return `Você é um redator científico profissional especializado em artigos acadêmicos de alta qualidade. Crie um artigo científico COMPLETO e DETALHADO sem usar placeholders.
 
     INFORMAÇÕES OBRIGATÓRIAS:
@@ -702,10 +1223,13 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
     • Área de Estudo: ${params.fieldOfStudy}
     • Metodologia: ${params.methodology}
     • Autores: ${authorsText}
-    ${params.abstract ? `• Resumo sugerido: "${params.abstract}"` : ''}
+    • Abstract LITERAL: "${params.abstract}"
     • Keywords LITERAIS: "${params.keywords}"
 
+    IMPERATIVO: Use EXATAMENTE o abstract e keywords fornecidos - não modifique uma vírgula!
+
     ${attachedFilesText}
+    ${chartsText}
 
     🚫 PROIBIÇÃO CRÍTICA - NÃO MENCIONAR ARQUIVOS:
     • JAMAIS cite nomes de arquivos no texto do artigo (ex: "dados.csv", "pesquisa.pdf", "imagem.jpg")
@@ -729,6 +1253,33 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
     ✗ Múltiplas linhas vazias consecutivas
 
     REGRAS PARA ELEMENTOS VISUAIS:
+    ${params.includeCharts ? 
+    `🔹 GRÁFICOS (QUANTIDADE FLEXÍVEL): Inclua 1-3 gráficos conforme necessário
+    ${params.chartIds ? 
+      `• Use SOMENTE estas TAGS: ${params.chartIds.map(id => `[CHART:${id}]`).join(', ')}
+    • FORMATO CORRETO: [CHART:id] (NÃO use [Imagem: chart_id.svg])
+    • REFERÊNCIAS GENÉRICAS: Use "a visualização", "o gráfico", "a ilustração" - NUNCA mencione o ID
+    • ESPAÇAMENTO E CENTRALIZAÇÃO OBRIGATÓRIOS: <div style="margin: 40px 0; text-align: center;">[CHART:id]</div>
+    • IMPORTANTE: As tags [CHART:id] são convertidas automaticamente em imagens SVG profissionais
+    • PADRÃO: Parágrafo contexto + Tag de gráfico centralizada + Parágrafo análise descritiva
+    • Distribua conforme necessário - não force se não agregar valor
+    • DISTÂNCIA MÍNIMA: 3 parágrafos entre gráficos consecutivos
+    • SEMPRE DESCREVA genericamente o que o gráfico mostra no texto ao redor
+    • SEMPRE CENTRALIZE: Todas as tags de gráfico devem aparecer centralizadas
+    • EXEMPLO DE REFERÊNCIA CORRETA: "Os dados apresentam tendências significativas, conforme demonstrado na visualização a seguir. A análise evidencia os padrões identificados na pesquisa."` :
+      `• USE TAGS: [CHART:id_aleatorio] com IDs únicos gerados aleatoriamente
+      • FORMATO: [CHART:analysis_rnd123], [CHART:comparison_xyz789], [CHART:results_abc456]
+      • REFERÊNCIAS GENÉRICAS: "a visualização", "o gráfico", "a demonstração"
+      • Sugestão de distribuição flexível:
+      - [CHART:methodology_rnd123] se apropriado na Metodologia
+      - [CHART:results_xyz789] se apropriado nos Resultados
+      - [CHART:discussion_abc456] se apropriado na Discussão
+      • SEMPRE centralize: <div style="margin: 40px 0; text-align: center;">[CHART:id]</div>
+      • NUNCA mencione os IDs no texto do artigo`
+    }` : 
+    `🔹 GRÁFICOS: Não solicitados - NÃO criar tags de gráfico`
+    }
+
     ${params.attachedFiles?.some(f => f.type === 'image') ? 
     `🔹 IMAGENS: Use ${params.attachedFiles.filter(f => f.type === 'image').map(f => `[Imagem: ${f.fileName}]`).join(', ')}
     ${params.attachedFiles.filter(f => f.type === 'image').length ? 
@@ -755,55 +1306,61 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
     • Formate: <strong>Nome do Autor</strong><br><em>Instituição</em>
     • Para múltiplos autores: separe com <hr style="margin: 10px 40%; border: 1px solid #e5e7eb;">
 
-    3️⃣ PALAVRAS-CHAVE
+    3️⃣ RESUMO/ABSTRACT
+    • Use seção destacada com <div style="background: #f8fafc; padding: 20px; border-left: 4px solid #2563eb; margin: 30px 0;">
+    • Título da seção: <h2 style="color: #1f2937; margin-bottom: 15px; font-size: 18px;">Resumo</h2>
+    • Conteúdo: Use LITERALMENTE "${params.abstract}"
+    • Não modifique nem uma vírgula do abstract fornecido
+
+    4️⃣ PALAVRAS-CHAVE
     • Use <div style="margin: 20px 0; padding: 15px; background: #f1f5f9;">
     • Título: <strong style="color: #374151;">Palavras-chave:</strong>
     • Conteúdo: Use LITERALMENTE "${params.keywords}"
     • Separe com vírgulas, sem modificações
 
-    4️⃣ INTRODUÇÃO (400-500 palavras)
+    5️⃣ INTRODUÇÃO (400-500 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Introdução</h2>
     • Contextualize o problema com dados específicos
     • Cite estatísticas reais da área
     • Estabeleça objetivos claros e mensuráveis
     • Justifique a relevância com números
 
-    5️⃣ REVISÃO DA LITERATURA (500-600 palavras)
+    6️⃣ REVISÃO DA LITERATURA (500-600 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Revisão da Literatura</h2>
     • Cite 5-8 estudos com autores e anos específicos
     • Compare metodologias e resultados quantitativos
     • Identifique lacunas específicas na literatura
     • Use transições fluidas entre os tópicos
 
-    6️⃣ METODOLOGIA (400-500 palavras)
+    7️⃣ METODOLOGIA (400-500 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Metodologia</h2>
     • Descreva população, amostra e critérios específicos
     • Detalhe instrumentos e procedimentos passo a passo
     • Especifique análises estatísticas (testes, software, p-valor)
     • Inclua aspectos éticos e temporais
 
-    7️⃣ RESULTADOS (500-600 palavras)
+    8️⃣ RESULTADOS (500-600 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Resultados</h2>
     • Apresente dados quantitativos específicos (percentuais, médias)
     • Organize em subtópicos claros
     • Relacione com objetivos estabelecidos
     • Use linguagem objetiva e precisa
 
-    8️⃣ DISCUSSÃO (450-550 palavras)
+    9️⃣ DISCUSSÃO (450-550 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Discussão</h2>
     • Compare resultados com literatura citada
     • Explique implicações práticas e teóricas
     • Reconheça limitações específicas
     • Sugira melhorias metodológicas
 
-    9️⃣ CONCLUSÃO (300-350 palavras)
+    🔟 CONCLUSÃO (300-350 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Conclusão</h2>
     • Sintetize achados principais
     • Destaque contribuições inovadoras
     • Proponha pesquisas futuras específicas
     • Termine com impacto prático
 
-    🔟 REFERÊNCIAS
+    1️⃣1️⃣ REFERÊNCIAS
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Referências</h2>
     • 6-10 referências em formato ABNT
     • Inclua DOIs realistas
@@ -820,17 +1377,23 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
 
     ESPAÇAMENTO PARA ELEMENTOS VISUAIS:
     • IMAGENS: Adicione margin: 30px 0 E text-align: center
-    • CONTEXTO: Sempre inclua parágrafo explicativo ANTES da imagem
-    • ANÁLISE: Sempre inclua parágrafo de análise DEPOIS da imagem
+    • GRÁFICOS COMO IMAGENS: Adicione margin: 40px 0 E text-align: center (centralizados)
+    • CONTEXTO: Sempre inclua parágrafo explicativo ANTES da imagem/gráfico
+    • ANÁLISE: Sempre inclua parágrafo de análise DEPOIS da imagem/gráfico
     • DISTRIBUIÇÃO: Máximo 1 elemento visual por seção longa (500+ palavras)
     • RESPIRAÇÃO: Deixe pelo menos 2-3 parágrafos entre elementos visuais consecutivos
-    • CENTRALIZAÇÃO: Todas as imagens devem aparecer centralizadas
+    • CENTRALIZAÇÃO: Todas as imagens e gráficos devem aparecer centralizados
 
     EXEMPLO DE ESPACIAMENTO CORRETO:
     <h1 style="color: #2563eb; font-weight: bold; text-align: center; margin-bottom: 30px;">Título do Artigo</h1>
     
     <div style="text-align: center; margin: 20px 0; color: #374151;">
     <strong>Nome do Autor</strong><br><em>Universidade, País</em>
+    </div>
+    
+    <div style="background: #f8fafc; padding: 20px; border-left: 4px solid #2563eb; margin: 30px 0;">
+    <h2 style="color: #1f2937; margin-bottom: 15px;">Resumo</h2>
+    <p>Conteúdo do abstract...</p>
     </div>
     
     <div style="margin: 20px 0; padding: 15px; background: #f1f5f9;">
@@ -967,16 +1530,18 @@ FORMATAÇÃO E ESTILO AVANÇADO:
 
 SUPORTE A MULTIMÍDIA (Considere Espaço Visual):
 - IMAGENS: Use APENAS se especificado no contexto: [Imagem: nome_do_arquivo]
+- GRÁFICOS: Use APENAS se especificado no contexto: [CHART:id_fornecido]
 
-IMPORTANTE: [Imagem: nome] são MARCADORES que serão processados depois
-- NÃO são imagens reais no momento da escrita
+IMPORTANTE: [CHART:id] e [Imagem: nome] são MARCADORES que serão processados depois
+- NÃO são gráficos ou imagens reais no momento da escrita
 - SEMPRE escreva texto descritivo ao redor desses marcadores
 - CONTEXTUALIZE antes: "Os dados coletados revelam...", "conforme demonstrado..."
 - ANALISE depois: "evidenciando que...", "demonstrando a tendência..."
 
-- ESPAÇO VISUAL: Imagens ocupam ~200-500px de altura
+- ESPAÇO VISUAL: Imagens ocupam ~200-500px de altura, gráficos ~300-400px
 - ESPAÇAMENTO E CENTRALIZAÇÃO OBRIGATÓRIOS: 
   * Imagens: <div style="margin: 30px 0; text-align: center;">[Imagem: nome]</div>
+  * Gráficos: <div style="margin: 40px 0;">[CHART:id]</div>
 - ESTRUTURA PADRÃO:
   * Parágrafo de contexto (explicando o que será mostrado)
   * Elemento visual com espaçamento e centralização (para imagens)
@@ -994,6 +1559,14 @@ IMPORTANTE: [Imagem: nome] são MARCADORES que serão processados depois
   </div>
   
   <p>Conforme demonstrado, o processo ilustra...</p>
+  
+  <p>Os resultados apresentados evidenciam...</p>
+  
+  <div style="margin: 40px 0;">
+  [CHART:dados_principais]
+  </div>
+  
+  <p>A análise dos dados revela tendências...</p>
 
 DIRETRIZES:
 - Use linguagem científica formal

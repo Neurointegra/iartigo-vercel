@@ -2,7 +2,6 @@ import { prisma } from '@/lib/database'
 
 export type CreateArticleData = {
   title: string
-  abstract?: string
   keywords?: string
   citationStyle?: string
   targetJournal?: string

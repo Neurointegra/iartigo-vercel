@@ -40,7 +40,10 @@ export async function POST(request: NextRequest) {
 
     // Gerar nome único para o arquivo
     const timestamp = Date.now()
-    const originalName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_')
+    // Normalizar o nome preservando caracteres acentuados mas removendo caracteres problemáticos
+    const originalName = file.name
+      .replace(/[<>:"/\\|?*]/g, '_') // Remove apenas caracteres problemáticos para sistema de arquivos
+      .replace(/\s+/g, '_') // Substitui espaços por underscore
     const fileName = `${timestamp}_${originalName}`
     const filePath = join(uploadsDir, fileName)
 

@@ -463,22 +463,6 @@ Exemplo: "Gráfico de barras com 4 categorias (A: 25%, B: 45%, C: 70%, D: 55%). 
     // Gerar hash simples do conteúdo da imagem para cache
     const imageHash = Buffer.from(imageData.substring(0, 100)).toString('base64')
     
-    // Detectar o tipo MIME da imagem a partir dos dados base64
-    let mimeType = "image/jpeg" // padrão
-    
-    // Verificar assinatura da imagem nos primeiros bytes
-    if (imageData.startsWith('/9j/')) {
-      mimeType = "image/jpeg"
-    } else if (imageData.startsWith('iVBORw0KGgoAAAANSUhEUgAA')) {
-      mimeType = "image/png"
-    } else if (imageData.startsWith('R0lGOD')) {
-      mimeType = "image/gif"
-    } else if (imageData.includes('UklGR')) {
-      mimeType = "image/webp"
-    }
-    
-    console.log(`📸 Tipo de imagem detectado: ${mimeType}`)
-    
     // Verificar cache primeiro
     const cached = this.getCachedImageAnalysis(imageHash)
     if (cached) {
@@ -513,7 +497,7 @@ Exemplo: "Gráfico de barras mostrando comparação de eficiência entre três m
       const imagePart = {
         inlineData: {
           data: imageData,
-          mimeType: mimeType
+          mimeType: "image/jpeg"
         }
       }
       
@@ -522,54 +506,12 @@ Exemplo: "Gráfico de barras mostrando comparação de eficiência entre três m
       const text = response.text()
       
       return text.trim()
-    }, 2, 1000).catch((error) => {
-      console.error('❌ Erro na análise da imagem:', error)
-      return 'Imagem relacionada ao tema da pesquisa'
-    })
+    }, 2, 1000).catch(() => 'Imagem relacionada ao tema da pesquisa')
 
     // Salvar no cache
     this.setCachedImageAnalysis(imageHash, analysis)
     
     return analysis
-  }
-
-  static async generateSimpleAbstract(title: string, content: string): Promise<string> {
-    try {
-      const model = genAI.getGenerativeModel({ 
-        model: 'gemini-2.0-flash-exp',
-        generationConfig: {
-          temperature: 0.7,
-          topK: 40,
-          topP: 0.8,
-          maxOutputTokens: 300,
-        }
-      })
-
-      const prompt = `
-Crie um resumo simples e direto em português para este artigo científico:
-
-TÍTULO: ${title}
-
-CONTEÚDO:
-${content.substring(0, 2000)}...
-
-INSTRUÇÕES:
-- Entre 100-150 palavras
-- Linguagem clara e objetiva
-- Estrutura: problema/objetivo → metodologia → contribuição
-- Sem formatação, apenas texto corrido
-
-Escreva apenas o resumo:
-      `
-
-      const result = await model.generateContent(prompt)
-      const response = await result.response
-      return response.text().trim()
-
-    } catch (error) {
-      console.error('Erro ao gerar resumo:', error)
-      return `Este estudo apresenta uma análise sobre ${title.toLowerCase()}, contribuindo para o avanço do conhecimento na área através de metodologias apropriadas e resultados relevantes.`
-    }
   }
 
   static async suggestLiterature(
@@ -702,8 +644,10 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
     • Área de Estudo: ${params.fieldOfStudy}
     • Metodologia: ${params.methodology}
     • Autores: ${authorsText}
-    ${params.abstract ? `• Resumo sugerido: "${params.abstract}"` : ''}
+    • Abstract LITERAL: "${params.abstract}"
     • Keywords LITERAIS: "${params.keywords}"
+
+    IMPERATIVO: Use EXATAMENTE o abstract e keywords fornecidos - não modifique uma vírgula!
 
     ${attachedFilesText}
 
@@ -755,55 +699,61 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
     • Formate: <strong>Nome do Autor</strong><br><em>Instituição</em>
     • Para múltiplos autores: separe com <hr style="margin: 10px 40%; border: 1px solid #e5e7eb;">
 
-    3️⃣ PALAVRAS-CHAVE
+    3️⃣ RESUMO/ABSTRACT
+    • Use seção destacada com <div style="background: #f8fafc; padding: 20px; border-left: 4px solid #2563eb; margin: 30px 0;">
+    • Título da seção: <h2 style="color: #1f2937; margin-bottom: 15px; font-size: 18px;">Resumo</h2>
+    • Conteúdo: Use LITERALMENTE "${params.abstract}"
+    • Não modifique nem uma vírgula do abstract fornecido
+
+    4️⃣ PALAVRAS-CHAVE
     • Use <div style="margin: 20px 0; padding: 15px; background: #f1f5f9;">
     • Título: <strong style="color: #374151;">Palavras-chave:</strong>
     • Conteúdo: Use LITERALMENTE "${params.keywords}"
     • Separe com vírgulas, sem modificações
 
-    4️⃣ INTRODUÇÃO (400-500 palavras)
+    5️⃣ INTRODUÇÃO (400-500 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Introdução</h2>
     • Contextualize o problema com dados específicos
     • Cite estatísticas reais da área
     • Estabeleça objetivos claros e mensuráveis
     • Justifique a relevância com números
 
-    5️⃣ REVISÃO DA LITERATURA (500-600 palavras)
+    6️⃣ REVISÃO DA LITERATURA (500-600 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Revisão da Literatura</h2>
     • Cite 5-8 estudos com autores e anos específicos
     • Compare metodologias e resultados quantitativos
     • Identifique lacunas específicas na literatura
     • Use transições fluidas entre os tópicos
 
-    6️⃣ METODOLOGIA (400-500 palavras)
+    7️⃣ METODOLOGIA (400-500 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Metodologia</h2>
     • Descreva população, amostra e critérios específicos
     • Detalhe instrumentos e procedimentos passo a passo
     • Especifique análises estatísticas (testes, software, p-valor)
     • Inclua aspectos éticos e temporais
 
-    7️⃣ RESULTADOS (500-600 palavras)
+    8️⃣ RESULTADOS (500-600 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Resultados</h2>
     • Apresente dados quantitativos específicos (percentuais, médias)
     • Organize em subtópicos claros
     • Relacione com objetivos estabelecidos
     • Use linguagem objetiva e precisa
 
-    8️⃣ DISCUSSÃO (450-550 palavras)
+    9️⃣ DISCUSSÃO (450-550 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Discussão</h2>
     • Compare resultados com literatura citada
     • Explique implicações práticas e teóricas
     • Reconheça limitações específicas
     • Sugira melhorias metodológicas
 
-    9️⃣ CONCLUSÃO (300-350 palavras)
+    🔟 CONCLUSÃO (300-350 palavras)
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Conclusão</h2>
     • Sintetize achados principais
     • Destaque contribuições inovadoras
     • Proponha pesquisas futuras específicas
     • Termine com impacto prático
 
-    🔟 REFERÊNCIAS
+    1️⃣1️⃣ REFERÊNCIAS
     • Título: <h2 style="color: #1f2937; border-bottom: 2px solid #3b82f6; padding-bottom: 8px; margin: 40px 0 20px 0;">Referências</h2>
     • 6-10 referências em formato ABNT
     • Inclua DOIs realistas
@@ -831,6 +781,11 @@ ${params.attachedFiles?.filter(f => f.type === 'image').length ?
     
     <div style="text-align: center; margin: 20px 0; color: #374151;">
     <strong>Nome do Autor</strong><br><em>Universidade, País</em>
+    </div>
+    
+    <div style="background: #f8fafc; padding: 20px; border-left: 4px solid #2563eb; margin: 30px 0;">
+    <h2 style="color: #1f2937; margin-bottom: 15px;">Resumo</h2>
+    <p>Conteúdo do abstract...</p>
     </div>
     
     <div style="margin: 20px 0; padding: 15px; background: #f1f5f9;">

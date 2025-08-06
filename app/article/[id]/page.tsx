@@ -17,19 +17,6 @@ import ArticleContentRenderer from '@/components/article-content-renderer'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  LineElement,
-  PointElement,
-  ArcElement,
-} from 'chart.js'
-import { Bar, Line, Pie } from 'react-chartjs-2'
-import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -39,19 +26,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-
-// Registrar componentes do Chart.js
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-)
 
 interface Article {
   id: string
@@ -309,23 +283,20 @@ export default function ArticlePage() {
           </p>
         </div>
 
-        ${article.abstract ? `
-          <div style="margin-bottom: 25px;">
-            <h2 style="font-size: 14px; font-weight: bold; margin-bottom: 10px;">Resumo</h2>
-            <p style="text-align: justify;">${article.abstract}</p>
-          </div>
-        ` : ''}
-
         ${article.keywords ? `
-          <div style="margin-bottom: 25px;">
-            <h2 style="font-size: 14px; font-weight: bold; margin-bottom: 10px;">Palavras-chave</h2>
-            <p>${article.keywords}</p>
+          <div style="margin: 30px 0; padding: 20px; background: #f1f5f9; border-radius: 10px; border: 1px solid #e2e8f0;">
+            <h2 style="font-size: 16px; font-weight: bold; margin-bottom: 15px; color: #475569; display: flex; align-items: center;">
+              <span style="margin-right: 8px;">🏷️</span> Palavras-chave
+            </h2>
+            <p style="margin: 0; font-size: 15px; color: #64748b; line-height: 1.6;">${article.keywords}</p>
           </div>
         ` : ''}
 
-        <div style="margin-bottom: 25px;">
-          <h2 style="font-size: 14px; font-weight: bold; margin-bottom: 15px;">Conteúdo</h2>
-          <div style="text-align: justify; white-space: pre-wrap;">${await processArticleContent(article.content)}</div>
+        <div style="margin: 50px 0 40px 0;">
+          <h2 style="font-size: 20px; font-weight: bold; margin-bottom: 30px; color: #1e293b; padding-bottom: 10px; border-bottom: 3px solid #3b82f6; display: flex; align-items: center;">
+            <span style="margin-right: 10px;">📖</span> Conteúdo do Artigo
+          </h2>
+          <div style="text-align: justify; white-space: pre-wrap; line-height: 1.8; font-size: 16px; color: #374151; margin-top: 30px;">${await processArticleContent(article.content)}</div>
         </div>
 
         <div style="margin-top: 40px; border-top: 1px solid #ccc; padding-top: 20px; font-size: 10px; color: #666;">
@@ -581,52 +552,66 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
     }
   }
 
-  // Função para formatar texto com marcações especiais
+  // Função para formatar texto com marcações especiais e melhor espaçamento
   const formatText = (text: string) => {
     if (!text) return text
     
-    // Primeiro corrigir entidades HTML problemáticas
-    let formatted = text
+    // Primeiro, preservar tags HTML existentes criando placeholders
+    const htmlTags: string[] = []
+    let formatted = text.replace(/<[^>]+>/g, (match) => {
+      const index = htmlTags.length
+      htmlTags.push(match)
+      return `__HTML_TAG_${index}__`
+    })
+    
+    // Corrigir entidades HTML problemáticas somente no texto
+    formatted = formatted
       .replace(/&gt;/g, '>')
       .replace(/&lt;/g, '<')
       .replace(/&amp;/g, '&')
       .replace(/&quot;/g, '"')
     
-    // Substituir **texto** por <strong>texto</strong> com estilos
-    formatted = formatted.replace(/\*\*(.*?)\*\*/g, '<strong style="font-weight: bold; color: #1f2937; background-color: #fef3c7; padding: 2px 4px; border-radius: 3px;">$1</strong>')
+    // Adicionar espaçamento melhor entre parágrafos (apenas no texto, não em HTML)
+    formatted = formatted.replace(/\n\n/g, '</p><div style="margin: 24px 0;"></div><p style="margin: 16px 0; line-height: 1.7; text-align: justify;">')
+    formatted = formatted.replace(/\n/g, '<br style="margin: 8px 0;">')
     
-    // Substituir *texto* por <em>texto</em> com estilos
-    formatted = formatted.replace(/\*(.*?)\*/g, '<em style="font-style: italic; color: #3b82f6;">$1</em>')
+    // Melhorar títulos e subtítulos
+    formatted = formatted.replace(/^##\s(.+)$/gm, '<h3 style="font-size: 20px; font-weight: bold; color: #1f2937; margin: 40px 0 20px 0; padding-bottom: 8px; border-bottom: 2px solid #3b82f6;">$1</h3>')
+    formatted = formatted.replace(/^#\s(.+)$/gm, '<h2 style="font-size: 24px; font-weight: bold; color: #1f2937; margin: 48px 0 24px 0; padding-bottom: 12px; border-bottom: 3px solid #3b82f6;">$1</h2>')
     
-    // Substituir _texto_ por <u>texto</u> APENAS em texto normal (não URLs, arquivos ou HTML)
-    // Usar regex complexa com negative lookbehind para evitar formatação em contextos HTML
-    try {
-      // Regex complexa que evita formatar _texto_ dentro de:
-      // - Tags HTML (src="...", href="...", etc.)
-      // - URLs (http://, https://, ftp://)
-      // - Nomes de arquivos (.svg, .png, .jpg, etc.)
-      formatted = formatted.replace(/(?<!(?:src|href|data|class|id|style|alt|title)=['"][^'"]*|(?:https?|ftp):\/\/[^\s]*|[a-zA-Z0-9_-]+\.[a-zA-Z0-9]+[^\s]*)\b_([^_\s]+(?:\s+[^_\s]+)*)_\b(?![^<]*>)/g, '<u style="text-decoration: underline; text-decoration-color: #ef4444; text-decoration-thickness: 2px;">$1</u>')
-    } catch (error) {
-      // Fallback para navegadores que não suportam negative lookbehind
-      console.warn('Negative lookbehind não suportado, usando fallback')
-      // Aplicar formatação básica apenas em palavras isoladas
-      formatted = formatted.replace(/\b_([a-zA-Z0-9]+(?:\s+[a-zA-Z0-9]+)*)_\b/g, (match, content) => {
-        // Verificar se não está dentro de uma tag HTML
-        const beforeMatch = formatted.substring(0, formatted.indexOf(match))
-        const afterMatch = formatted.substring(formatted.indexOf(match) + match.length)
-        
-        // Se estiver entre < e >, provavelmente é uma tag HTML
-        const lastOpenTag = beforeMatch.lastIndexOf('<')
-        const lastCloseTag = beforeMatch.lastIndexOf('>')
-        const nextCloseTag = afterMatch.indexOf('>')
-        
-        if (lastOpenTag > lastCloseTag && nextCloseTag !== -1) {
-          return match // Não formatar se estiver dentro de uma tag
-        }
-        
-        return `<u style="text-decoration: underline; text-decoration-color: #ef4444; text-decoration-thickness: 2px;">${content}</u>`
-      })
-    }
+    // Formatação segura: apenas aplicar em texto que NÃO contém placeholders de HTML
+    // Substituir **texto** por <strong>texto</strong> com estilos (evitando placeholders)
+    formatted = formatted.replace(/\*\*([^*]*(?:\*(?!\*)[^*]*)*)\*\*/g, (match, content) => {
+      if (content.includes('__HTML_TAG_')) {
+        return match // Não formatar se contém HTML
+      }
+      return `<strong style="font-weight: bold; color: #1f2937; background-color: #fef3c7; padding: 3px 6px; border-radius: 4px; margin: 0 2px;">${content}</strong>`
+    })
+    
+    // Substituir *texto* por <em>texto</em> com estilos (evitando placeholders)
+    formatted = formatted.replace(/\*([^*]*)\*/g, (match, content) => {
+      if (content.includes('__HTML_TAG_') || content.includes('**')) {
+        return match // Não formatar se contém HTML ou é bold
+      }
+      return `<em style="font-style: italic; color: #3b82f6; font-weight: 500;">${content}</em>`
+    })
+    
+    // Melhorar listas
+    formatted = formatted.replace(/^[\s]*[-•]\s(.+)$/gm, '<li style="margin: 8px 0; padding-left: 8px; line-height: 1.6;">$1</li>')
+    formatted = formatted.replace(/(<li[^>]*>.*<\/li>)/g, '<ul style="margin: 20px 0; padding-left: 24px; list-style-type: disc;">$1</ul>')
+    
+    // Substituir _texto_ por <u>texto</u> de forma mais segura
+    formatted = formatted.replace(/\b_([^_\s]+(?:\s+[^_\s]+)*)_\b/g, (match, content) => {
+      if (content.includes('__HTML_TAG_')) {
+        return match // Não formatar se contém HTML
+      }
+      return `<u style="text-decoration: underline; text-decoration-color: #ef4444; text-decoration-thickness: 2px; text-underline-offset: 3px;">${content}</u>`
+    })
+    
+    // Restaurar tags HTML originais
+    formatted = formatted.replace(/__HTML_TAG_(\d+)__/g, (match, index) => {
+      return htmlTags[parseInt(index)] || match
+    })
     
     return formatted
   }

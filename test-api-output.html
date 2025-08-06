@@ -1,0 +1,50 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Teste Chart API</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h2>Teste HTML da API - Chart.js</h2>
+    
+    <div style="margin: 40px 0; text-align: center; padding: 0 20px;">
+      <div style="width: 100%; max-width: 700px; margin: 0 auto; background: white; border-radius: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); padding: 30px;">
+        <canvas id="chart_test-chart-1_1754438659676_9uirnu5zf" width="700" height="350" style="max-width: 100%; height: 350px;"></canvas>
+      </div>
+      <p style="margin: 20px 0 10px 0; font-style: italic; color: #6B7280; font-size: 14px; text-align: center; max-width: 600px; margin-left: auto; margin-right: auto;">
+        Gráfico de teste para verificar Chart.js
+      </p>
+    </div>
+    <script>
+      (function() {
+        function initChart() {
+          if (typeof Chart === 'undefined') {
+            console.log('Chart.js não carregado, aguardando...');
+            setTimeout(initChart, 100);
+            return;
+          }
+          
+          const ctx = document.getElementById('chart_test-chart-1_1754438659676_9uirnu5zf');
+          if (ctx && !ctx.chart) {
+            console.log('Inicializando gráfico chart_test-chart-1_1754438659676_9uirnu5zf');
+            try {
+              ctx.chart = new Chart(ctx, {"type":"bar","data":{"labels":["Janeiro","Fevereiro","Março","Abril"],"datasets":[{"label":"Teste de Vendas","data":[120,190,300,170],"backgroundColor":["#3B82F6","#10B981","#EF4444","#F59E0B","#8B5CF6","#06B6D4","#F97316","#84CC16"],"borderColor":"#374151","borderWidth":2}]},"options":{"responsive":true,"maintainAspectRatio":false,"plugins":{"title":{"display":true,"text":"Teste de Vendas","font":{"size":18,"weight":"bold"},"color":"#1F2937"},"legend":{"display":false,"position":"bottom"}},"scales":{"y":{"beginAtZero":true,"grid":{"color":"#F3F4F6"},"ticks":{"color":"#6B7280"}},"x":{"grid":{"color":"#F3F4F6"},"ticks":{"color":"#6B7280"}}}}});
+              console.log('✅ Gráfico chart_test-chart-1_1754438659676_9uirnu5zf criado com sucesso');
+            } catch (error) {
+              console.error('❌ Erro ao criar gráfico chart_test-chart-1_1754438659676_9uirnu5zf:', error);
+            }
+          }
+        }
+        
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', initChart);
+        } else {
+          initChart();
+        }
+      })();
+    </script>
+  
+</body>
+</html>

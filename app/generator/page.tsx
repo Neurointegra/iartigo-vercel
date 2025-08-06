@@ -15,7 +15,6 @@ import {
   FileText,
   Upload,
   Download,
-  BarChart3,
   Image as ImageIcon,
   FileSpreadsheet,
   Mail,
@@ -28,32 +27,6 @@ import {
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-  LineElement,
-  PointElement,
-  ArcElement,
-} from 'chart.js'
-import { Bar, Line, Pie } from 'react-chartjs-2'
-
-// Registrar componentes do Chart.js
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  LineElement,
-  PointElement,
-  ArcElement,
-  Title,
-  Tooltip,
-  Legend
-)
 
 interface FileUpload {
   file: File
@@ -62,6 +35,8 @@ interface FileUpload {
   size: string
   content?: string // Conteúdo do arquivo de texto ou URL da imagem
   imageUrl?: string // URL específica para imagens
+  description?: string // Descrição manual da imagem fornecida pelo usuário
+  needsDescription?: boolean // Indica se a imagem precisa de descrição
 }
 
 export default function GeneratorPage() {
@@ -76,8 +51,7 @@ export default function GeneratorPage() {
   const [generationProgress, setGenerationProgress] = useState(0)
   const [generatedContent, setGeneratedContent] = useState("")
   const [uploadedFiles, setUploadedFiles] = useState<FileUpload[]>([])
-  const [generatedCharts, setGeneratedCharts] = useState<any[]>([])
-  const [isGeneratingCharts, setIsGeneratingCharts] = useState(false)
+  const [generationStep, setGenerationStep] = useState("")
   
   const [formData, setFormData] = useState({
     title: "",
@@ -88,8 +62,6 @@ export default function GeneratorPage() {
     keywords: "",
     transformThesis: false,
     hasCollectedData: false,
-    generateGraphics: false,
-    graphicsParameters: "",
     hasImages: false,
   })
 
@@ -105,19 +77,10 @@ export default function GeneratorPage() {
   ]
 
   const handleInputChange = (field: string, value: string | boolean) => {
-    setFormData(prev => {
-      const newData = {
-        ...prev,
-        [field]: value
-      }
-      
-      // Se gráficos forem ativados, automaticamente marcar "dados coletados"
-      if (field === 'generateGraphics' && value === true) {
-        newData.hasCollectedData = true
-      }
-      
-      return newData
-    })
+    setFormData(prev => ({
+      ...prev,
+      [field]: value
+    }))
   }
 
   const handleFileUpload = (type: 'thesis' | 'data' | 'image') => {
@@ -170,7 +133,8 @@ export default function GeneratorPage() {
       if (type === 'image') {
         try {
           fileContent = await uploadImageFile(file)
-          console.log('Imagem salva em:', fileContent)
+          console.log('🖼️ Imagem salva em:', fileContent)
+          
         } catch (error) {
           console.log('Erro ao fazer upload da imagem:', error)
           toast({
@@ -180,9 +144,11 @@ export default function GeneratorPage() {
           })
           return
         }
-      } else if (type === 'thesis' || (type === 'data' && file.type.includes('text'))) {
+      } else if (type === 'thesis' || type === 'data') {
         try {
+          // Para arquivos de dados, sempre tentar ler o conteúdo como texto
           fileContent = await readFileContent(file)
+          console.log(`📄 Conteúdo lido do arquivo ${file.name}:`, fileContent?.substring(0, 200) + '...')
         } catch (error) {
           console.log('Não foi possível ler o conteúdo do arquivo:', error)
         }
@@ -194,7 +160,8 @@ export default function GeneratorPage() {
         name: file.name,
         size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
         content: fileContent,
-        imageUrl: type === 'image' ? fileContent : undefined
+        imageUrl: type === 'image' ? fileContent : undefined,
+        needsDescription: type === 'image' // Marcar imagens como precisando de descrição
       }
       
       setUploadedFiles(prev => [...prev, fileUpload])
@@ -202,7 +169,7 @@ export default function GeneratorPage() {
       toast({
         title: "Arquivo carregado",
         description: `${file.name} foi carregado com sucesso.${
-          type === 'image' ? ' Imagem processada e pronta para inserção no artigo.' :
+          type === 'image' ? ' Por favor, adicione uma descrição da imagem.' :
           fileContent ? ' Conteúdo processado e pronto para uso.' : ''
         }`,
         variant: "default",
@@ -212,6 +179,14 @@ export default function GeneratorPage() {
 
   const removeFile = (index: number) => {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const updateImageDescription = (index: number, description: string) => {
+    setUploadedFiles(prev => 
+      prev.map((file, i) => 
+        i === index ? { ...file, description, needsDescription: false } : file
+      )
+    )
   }
 
   const validateForm = () => {
@@ -232,27 +207,19 @@ export default function GeneratorPage() {
       })
       return false
     }
+
+    // Verificar se todas as imagens têm descrição
+    const imagesWithoutDescription = uploadedFiles.filter(file => 
+      file.type === 'image' && (!file.description || file.description.trim() === '')
+    )
     
-    if (!formData.centralTheme.trim()) {
+    if (imagesWithoutDescription.length > 0) {
       toast({
-        title: "Campo obrigatório",
-        description: "Por favor, preencha o tema central da pesquisa.",
+        title: "Descrições pendentes",
+        description: `Por favor, adicione uma descrição para ${imagesWithoutDescription.length === 1 ? 'a imagem' : `as ${imagesWithoutDescription.length} imagens`} carregada(s).`,
         variant: "destructive",
       })
       return false
-    }
-
-    // Validação obrigatória: se gráficos forem solicitados, dados devem estar anexados
-    if (formData.generateGraphics) {
-      const dataFiles = uploadedFiles.filter(file => file.type === 'data')
-      if (dataFiles.length === 0) {
-        toast({
-          title: "Dados obrigatórios ausentes",
-          description: "Para gerar gráficos, você deve anexar pelo menos um arquivo de dados (CSV, Excel, JSON, TXT).",
-          variant: "destructive",
-        })
-        return false
-      }
     }
     
     return true
@@ -286,19 +253,26 @@ export default function GeneratorPage() {
         size: file.size,
         fileName: file.file.name,
         content: file.type === 'image' ? file.imageUrl : file.content, // Para imagens, usar a URL
-        imageUrl: file.imageUrl // Incluir URL específica para imagens
+        imageUrl: file.imageUrl, // Incluir URL específica para imagens
+        description: file.description // Incluir descrição visual das imagens
       }))
+      
+      console.log('📁 Arquivos preparados para envio:', filesData.map(f => ({
+        name: f.name,
+        type: f.type,
+        hasContent: !!f.content,
+        contentLength: f.content?.length || 0
+      })))
 
       // Preparar dados para envio
       const articleData = {
         title: formData.title,
+        abstract: formData.centralTheme?.trim() || '',
         articleType: formData.articleType,
-        abstract: formData.centralTheme,
         keywords: formData.keywords,
         fieldOfStudy: "Geral",
         methodology: formData.justification,
         researchObjectives: formData.objectives,
-        includeCharts: formData.generateGraphics,
         includeTables: formData.hasCollectedData,
         authors: user ? [{
           id: user.id,
@@ -334,37 +308,6 @@ export default function GeneratorPage() {
 
       // Processar conteúdo adicional
       let additionalContent = result.content;
-      let generatedCharts: any[] = [];
-
-      // Adicionar imagens se solicitado
-      if (formData.hasImages) {
-        let imagesContent = "\n\n<h2 style='color: #1f2937; border-bottom: 2px solid #059669; padding-bottom: 8px;'>Documentação Visual</h2>\n\n";
-        
-        // Usar imagens realmente enviadas pelo usuário
-        const imageFiles = uploadedFiles.filter(file => file.type === 'image');
-        
-        if (imageFiles.length > 0) {
-          imageFiles.forEach((imageFile, index) => {
-            imagesContent += `<p>A documentação visual relacionada ao estudo pode ser observada na imagem a seguir:</p>\n\n`;
-            imagesContent += `[Imagem: ${imageFile.name}]\n\n`;
-            imagesContent += `<p style='font-style: italic; color: #6b7280; font-size: 14px;'>Figura ${index + 1}: ${imageFile.name.replace(/\.[^/.]+$/, "").replace(/_/g, " ")}</p>\n\n`;
-          });
-        } else {
-          // Fallback para imagens de exemplo se nenhuma foi enviada
-          const imageExamples = [
-            { name: "metodologia_fluxograma.jpg", description: "Fluxograma da metodologia utilizada" },
-            { name: "ambiente_pesquisa.jpg", description: "Ambiente onde foi realizada a pesquisa" }
-          ];
-
-          imageExamples.forEach((img, index) => {
-            imagesContent += `<p>A ${img.description} pode ser observada na imagem a seguir:</p>\n\n`;
-            imagesContent += `[Imagem: ${img.name}]\n\n`;
-            imagesContent += `<p style='font-style: italic; color: #6b7280; font-size: 14px;'>Figura ${index + 1}: ${img.description}</p>\n\n`;
-          });
-        }
-
-        additionalContent += imagesContent;
-      }
 
       // Criar artigo no banco de dados
       if (!user?.id) {
@@ -379,7 +322,6 @@ export default function GeneratorPage() {
       console.log('Tentando salvar artigo com dados:', {
         title: formData.title,
         userId: user?.id,
-        chartsCount: generatedCharts.length,
         contentLength: additionalContent.length
       });
 
@@ -391,14 +333,12 @@ export default function GeneratorPage() {
         body: JSON.stringify({
           title: formData.title,
           content: additionalContent,
-          abstract: formData.centralTheme,
           keywords: formData.keywords,
           status: 'draft',
           citationStyle: 'ABNT',
           targetJournal: '',
           fieldOfStudy: 'Geral',
-          userId: user?.id,
-          charts: generatedCharts // Incluir gráficos gerados
+          userId: user?.id
         }),
       })
 
@@ -407,7 +347,7 @@ export default function GeneratorPage() {
         
         toast({
           title: "Artigo criado com sucesso!",
-          description: `Artigo gerado com formatação HTML/CSS${formData.generateGraphics ? ', gráficos' : ''}${formData.hasImages ? ' e referências de imagens' : ''}. Redirecionando para o editor...`,
+          description: `Artigo gerado com formatação HTML/CSS${formData.hasImages ? ' e referências de imagens' : ''}. Redirecionando para o editor...`,
           variant: "default",
         })
 
@@ -442,6 +382,7 @@ export default function GeneratorPage() {
       })
     } finally {
       setIsGenerating(false)
+      setGenerationStep("")
     }
   }
 
@@ -512,13 +453,19 @@ export default function GeneratorPage() {
                 </div>
 
                 <div>
-                  <Label htmlFor="centralTheme">Tema Central da Pesquisa *</Label>
+                  <Label htmlFor="centralTheme">
+                    Resumo Personalizado (Opcional)
+                    <span className="text-sm text-gray-500 font-normal ml-2">
+                      💡 Deixe vazio para gerar automaticamente com base no conteúdo final
+                    </span>
+                  </Label>
                   <Textarea
                     id="centralTheme"
-                    placeholder="Ex: A influência da inteligência artificial na personalização do aprendizado em escolas de ensino fundamental."
+                    placeholder="Deixe em branco para gerar automaticamente baseado no conteúdo do artigo, ou insira um resumo personalizado..."
                     value={formData.centralTheme}
                     onChange={(e) => handleInputChange('centralTheme', e.target.value)}
                     rows={3}
+                    required={false}
                   />
                 </div>
 
@@ -624,58 +571,7 @@ export default function GeneratorPage() {
                       <p className="text-sm text-gray-500 mt-1">
                         Dados serão processados para análise
                       </p>
-                      {formData.generateGraphics && (
-                        <div className="mt-2">
-                          <Badge 
-                            variant={uploadedFiles.filter(f => f.type === 'data').length > 0 ? "default" : "destructive"}
-                            className="text-xs"
-                          >
-                            {uploadedFiles.filter(f => f.type === 'data').length > 0 
-                              ? `✓ ${uploadedFiles.filter(f => f.type === 'data').length} arquivo(s) de dados anexado(s)`
-                              : "⚠️ Dados obrigatórios para gráficos"
-                            }
-                          </Badge>
-                        </div>
-                      )}
                     </div>
-                  </div>
-                )}
-
-                {/* Checkbox para geração de gráficos */}
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="generateGraphics"
-                    checked={formData.generateGraphics}
-                    onCheckedChange={(checked) => handleInputChange('generateGraphics', checked as boolean)}
-                  />
-                  <Label htmlFor="generateGraphics">Desejo geração de gráficos</Label>
-                </div>
-
-                {formData.generateGraphics && (
-                  <div className="ml-6 space-y-3">
-                    {/* Aviso sobre dados obrigatórios */}
-                    <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-                      <div className="flex items-start gap-3">
-                        <AlertCircle className="h-5 w-5 text-orange-500 mt-0.5 flex-shrink-0" />
-                        <div>
-                          <p className="text-sm font-medium text-orange-800 mb-1">
-                            ⚠️ DADOS OBRIGATÓRIOS PARA GRÁFICOS
-                          </p>
-                          <p className="text-sm text-orange-700">
-                            Para gerar gráficos, você <strong>DEVE</strong> anexar arquivos contendo dados estruturados (CSV, Excel, JSON, TXT). 
-                            Sem dados reais, os gráficos não serão gerados.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-
-                    <p className="text-sm text-gray-600">Parâmetros para Geração de Gráficos (ex: "comparar média de idade por grupo", "distribuição de notas")</p>
-                    <Textarea
-                      placeholder="Descreva os parâmetros ou tipos de gráficos desejados."
-                      rows={2}
-                      value={formData.graphicsParameters}
-                      onChange={(e) => handleInputChange('graphicsParameters', e.target.value)}
-                    />
                   </div>
                 )}
 
@@ -714,50 +610,80 @@ export default function GeneratorPage() {
                   <div className="space-y-2">
                     <Label>Arquivos Carregados:</Label>
                     {uploadedFiles.map((file, index) => (
-                      <div key={index} className={`flex items-center justify-between p-3 bg-gray-50 rounded ${
-                        file.type === 'image' ? 'border-l-4 border-blue-500' : ''
+                      <div key={index} className={`p-4 bg-gray-50 rounded-lg border ${
+                        file.type === 'image' ? 'border-l-4 border-blue-500' : 'border-gray-200'
                       }`}>
-                        <div className="flex items-center gap-3 flex-1">
-                          {file.type === 'image' && file.imageUrl ? (
-                            <div className="flex items-center gap-2">
+                        {file.type === 'image' && file.imageUrl ? (
+                          <div className="space-y-3">
+                            <div className="flex items-start gap-3">
                               <img 
                                 src={file.imageUrl} 
                                 alt={file.name}
-                                className="w-12 h-12 object-cover rounded border"
+                                className="w-16 h-16 object-cover rounded border"
                               />
-                              <div className="flex flex-col">
-                                <span className="text-sm font-medium">{file.name}</span>
-                                <span className="text-xs text-gray-500">URL: {file.imageUrl}</span>
+                              <div className="flex-1">
+                                <div className="flex items-center justify-between mb-2">
+                                  <span className="text-sm font-medium">{file.name}</span>
+                                  <Badge variant="outline" className="text-xs">{file.size}</Badge>
+                                </div>
+                                <span className="text-xs text-gray-500 block mb-2">URL: {file.imageUrl}</span>
+                                
+                                {/* Campo para descrição da imagem */}
+                                <div className="space-y-2">
+                                  <Label className="text-xs font-medium text-gray-700">
+                                    Descreva esta imagem: *
+                                  </Label>
+                                  <textarea
+                                    placeholder="Ex: Gráfico de barras mostrando resultados do experimento..."
+                                    value={file.description || ''}
+                                    onChange={(e) => updateImageDescription(index, e.target.value)}
+                                    className={`w-full p-2 text-sm border rounded resize-none h-20 ${
+                                      file.needsDescription && !file.description 
+                                        ? 'border-red-300 bg-red-50' 
+                                        : 'border-gray-300'
+                                    }`}
+                                  />
+                                  {file.needsDescription && !file.description && (
+                                    <span className="text-xs text-red-600">
+                                      ⚠️ Descrição obrigatória para gerar o artigo
+                                    </span>
+                                  )}
+                                </div>
                               </div>
                             </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              {file.type === 'data' ? (
-                                <FileSpreadsheet className="h-4 w-4 text-green-500" />
-                              ) : (
-                                <FileText className="h-4 w-4 text-gray-500" />
+                          </div>
+                        ) : (
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3 flex-1">
+                              <div className="flex items-center gap-2">
+                                {file.type === 'data' ? (
+                                  <FileSpreadsheet className="h-4 w-4 text-green-500" />
+                                ) : (
+                                  <FileText className="h-4 w-4 text-gray-500" />
+                                )}
+                                <span className="text-sm">{file.name}</span>
+                              </div>
+                              <Badge variant="outline" className="text-xs">{file.size}</Badge>
+                              {file.content && (
+                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                                  ✓ Conteúdo processado
+                                </Badge>
                               )}
-                              <span className="text-sm">{file.name}</span>
                             </div>
-                          )}
-                          <Badge variant="outline" className="text-xs">{file.size}</Badge>
-                          {file.content && (
-                            <Badge variant="secondary" className={`text-xs ${
-                              file.type === 'image' 
-                                ? 'bg-blue-100 text-blue-800' 
-                                : 'bg-green-100 text-green-800'
-                            }`}>
-                              ✓ {file.type === 'image' ? 'Salva no servidor' : 'Conteúdo processado'}
-                            </Badge>
-                          )}
+                          </div>
+                        )}
+                        
+                        {/* Botão remover */}
+                        <div className="flex justify-end mt-2">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => removeFile(index)}
+                            className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                          >
+                            Remover
+                          </Button>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => removeFile(index)}
-                        >
-                          ×
-                        </Button>
                       </div>
                     ))}
                   </div>
@@ -797,6 +723,11 @@ export default function GeneratorPage() {
                       <span>{Math.round(generationProgress)}%</span>
                     </div>
                     <Progress value={generationProgress} className="w-full" />
+                    {generationStep && (
+                      <div className="mt-2 text-sm text-blue-600 font-medium">
+                        {generationStep}
+                      </div>
+                    )}
                   </div>
                 )}
               </CardContent>
@@ -815,30 +746,6 @@ export default function GeneratorPage() {
                   <div className="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
                     <pre className="whitespace-pre-wrap text-sm">{generatedContent}</pre>
                   </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Gráficos Gerados */}
-            {generatedCharts.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Gráficos Gerados</CardTitle>
-                  <CardDescription>
-                    Gráficos criados para seu artigo científico
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  {generatedCharts.map((chart) => (
-                    <div key={chart.id} className="border rounded-lg p-4">
-                      <h4 className="font-medium mb-3">{chart.title}</h4>
-                      <div style={{ height: '300px' }}>
-                        {chart.type === 'bar' && <Bar data={chart.data} options={chart.options} />}
-                        {chart.type === 'line' && <Line data={chart.data} options={chart.options} />}
-                        {chart.type === 'pie' && <Pie data={chart.data} options={chart.options} />}
-                      </div>
-                    </div>
-                  ))}
                 </CardContent>
               </Card>
             )}

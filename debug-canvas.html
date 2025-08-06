@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Debug Canvas Chart.js</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f5f5f5; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .debug { background: white; padding: 20px; margin: 20px 0; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        .chart-wrapper { 
+            background: white; 
+            padding: 30px; 
+            border-radius: 12px; 
+            box-shadow: 0 4px 16px rgba(0,0,0,0.1); 
+            margin: 20px 0;
+        }
+        canvas { 
+            border: 2px dashed #ccc; 
+            max-width: 100%; 
+            height: 350px !important;
+        }
+        .log { 
+            background: #f8f9fa; 
+            padding: 10px; 
+            margin: 10px 0; 
+            border-left: 4px solid #007bff; 
+            font-family: monospace; 
+            font-size: 12px;
+        }
+        .success { border-left-color: #28a745; background: #d4edda; }
+        .error { border-left-color: #dc3545; background: #f8d7da; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 Debug Canvas Chart.js</h1>
+        
+        <div class="debug">
+            <h3>📋 Informações do Sistema</h3>
+            <div id="systemInfo"></div>
+        </div>
+
+        <div class="debug">
+            <h3>📊 Teste Canvas Simples</h3>
+            <div class="chart-wrapper">
+                <canvas id="simpleChart" width="600" height="300"></canvas>
+            </div>
+            <button onclick="createSimpleChart()">🔄 Criar Gráfico Simples</button>
+        </div>
+
+        <div class="debug">
+            <h3>📈 Teste API Integration</h3>
+            <div class="chart-wrapper">
+                <div id="apiChartContainer">
+                    <!-- Aqui será inserido o HTML da API -->
+                </div>
+            </div>
+            <button onclick="testAPIChart()">🌐 Testar API Chart</button>
+        </div>
+
+        <div class="debug">
+            <h3>📝 Log de Debug</h3>
+            <div id="debugLog"></div>
+        </div>
+    </div>
+
+    <script>
+        function log(message, type = 'info') {
+            const logDiv = document.getElementById('debugLog');
+            const logEntry = document.createElement('div');
+            logEntry.className = `log ${type}`;
+            logEntry.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logDiv.appendChild(logEntry);
+            console.log(message);
+            
+            // Auto-scroll
+            logDiv.scrollTop = logDiv.scrollHeight;
+        }
+
+        function showSystemInfo() {
+            const info = document.getElementById('systemInfo');
+            info.innerHTML = `
+                <p><strong>Chart.js:</strong> ${typeof Chart !== 'undefined' ? '✅ Carregado' : '❌ Não carregado'}</p>
+                <p><strong>Versão Chart.js:</strong> ${typeof Chart !== 'undefined' ? Chart.version || 'Desconhecida' : 'N/A'}</p>
+                <p><strong>User Agent:</strong> ${navigator.userAgent}</p>
+                <p><strong>Canvas Support:</strong> ${document.createElement('canvas').getContext ? '✅ Suportado' : '❌ Não suportado'}</p>
+                <p><strong>Timestamp:</strong> ${new Date().toISOString()}</p>
+            `;
+        }
+
+        function createSimpleChart() {
+            log('🎯 Iniciando criação de gráfico simples...');
+            
+            if (typeof Chart === 'undefined') {
+                log('❌ Chart.js não está carregado!', 'error');
+                return;
+            }
+
+            const ctx = document.getElementById('simpleChart');
+            if (!ctx) {
+                log('❌ Canvas não encontrado!', 'error');
+                return;
+            }
+
+            // Destruir gráfico anterior se existir
+            if (ctx.chart) {
+                ctx.chart.destroy();
+                log('🗑️ Gráfico anterior removido');
+            }
+
+            try {
+                log('📐 Configurando gráfico...');
+                
+                const config = {
+                    type: 'bar',
+                    data: {
+                        labels: ['A', 'B', 'C', 'D'],
+                        datasets: [{
+                            label: 'Dados de Teste',
+                            data: [12, 19, 3, 17],
+                            backgroundColor: [
+                                'rgba(255, 99, 132, 0.7)',
+                                'rgba(54, 162, 235, 0.7)',
+                                'rgba(255, 205, 86, 0.7)',
+                                'rgba(75, 192, 192, 0.7)'
+                            ],
+                            borderColor: [
+                                'rgba(255, 99, 132, 1)',
+                                'rgba(54, 162, 235, 1)',
+                                'rgba(255, 205, 86, 1)',
+                                'rgba(75, 192, 192, 1)'
+                            ],
+                            borderWidth: 2
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            title: {
+                                display: true,
+                                text: 'Teste de Canvas',
+                                font: { size: 16, weight: 'bold' }
+                            }
+                        },
+                        scales: {
+                            y: { 
+                                beginAtZero: true,
+                                grid: { color: '#e0e0e0' }
+                            },
+                            x: {
+                                grid: { color: '#e0e0e0' }
+                            }
+                        },
+                        animation: {
+                            onComplete: function() {
+                                log('✅ Animação de gráfico concluída', 'success');
+                            }
+                        }
+                    }
+                };
+
+                log('🚀 Criando gráfico Chart.js...');
+                ctx.chart = new Chart(ctx, config);
+                log('✅ Gráfico criado com sucesso!', 'success');
+
+                // Verificar renderização após delay
+                setTimeout(() => {
+                    try {
+                        const imageData = ctx.toDataURL();
+                        log(`📊 Canvas renderizado: ${imageData.length} caracteres`, 'success');
+                        
+                        // Verificar se tem conteúdo visual
+                        if (imageData.length > 5000) {
+                            log('✅ Canvas parece ter conteúdo visual!', 'success');
+                        } else {
+                            log('⚠️ Canvas pode estar vazio ou com pouco conteúdo', 'error');
+                        }
+                    } catch (e) {
+                        log(`❌ Erro ao verificar canvas: ${e.message}`, 'error');
+                    }
+                }, 1500);
+
+            } catch (error) {
+                log(`❌ Erro ao criar gráfico: ${error.message}`, 'error');
+                console.error('Erro detalhado:', error);
+            }
+        }
+
+        async function testAPIChart() {
+            log('🌐 Testando integração com API...');
+            
+            try {
+                const testData = {
+                    charts: [{
+                        id: 'test-api-chart',
+                        name: 'Teste API Chart',
+                        type: 'bar',
+                        data: {
+                            labels: ['Jan', 'Fev', 'Mar', 'Abr'],
+                            values: [10, 20, 15, 25]
+                        },
+                        description: 'Gráfico de teste da API',
+                        referenceId: '[CHART:test-api]'
+                    }]
+                };
+
+                log('📤 Enviando requisição para API...');
+                
+                const response = await fetch('http://localhost:3002/api/process-charts-test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(testData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API retornou status ${response.status}`);
+                }
+
+                const result = await response.json();
+                log('✅ Resposta da API recebida', 'success');
+
+                if (result.chartHtml && result.chartHtml.length > 0) {
+                    log('📋 Inserindo HTML do gráfico...');
+                    document.getElementById('apiChartContainer').innerHTML = result.chartHtml[0];
+                    log('✅ HTML inserido com sucesso!', 'success');
+                } else {
+                    log('❌ Nenhum HTML de gráfico retornado', 'error');
+                }
+
+            } catch (error) {
+                log(`❌ Erro na integração com API: ${error.message}`, 'error');
+                console.error('Erro detalhado:', error);
+            }
+        }
+
+        // Inicialização
+        document.addEventListener('DOMContentLoaded', function() {
+            log('🚀 Página carregada, iniciando debug...');
+            showSystemInfo();
+            
+            // Aguardar Chart.js carregar
+            if (typeof Chart === 'undefined') {
+                log('⏳ Aguardando Chart.js carregar...');
+                let attempts = 0;
+                const checkChart = setInterval(() => {
+                    attempts++;
+                    if (typeof Chart !== 'undefined') {
+                        log('✅ Chart.js carregado!', 'success');
+                        clearInterval(checkChart);
+                        showSystemInfo();
+                    } else if (attempts > 50) {
+                        log('❌ Timeout: Chart.js não carregou', 'error');
+                        clearInterval(checkChart);
+                    }
+                }, 100);
+            } else {
+                log('✅ Chart.js já carregado!', 'success');
+            }
+        });
+    </script>
+</body>
+</html>

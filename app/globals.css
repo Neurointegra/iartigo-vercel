@@ -92,3 +92,56 @@ body {
     @apply bg-background text-foreground;
   }
 }
+
+/* Estilos para imagens em artigos */
+.image-container {
+  margin: 40px 0 !important;
+  text-align: center !important;
+  padding: 20px 0 !important;
+  width: 100% !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+}
+
+.image-container > div {
+  max-width: 800px !important;
+  width: 100% !important;
+  text-align: center !important;
+}
+
+.image-container img {
+  max-width: 100% !important;
+  height: auto !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.1) !important;
+  display: block !important;
+  margin: 0 auto !important;
+}
+
+.image-container p {
+  margin: 15px 0 0 0 !important;
+  font-style: italic !important;
+  color: #666 !important;
+  font-size: 14px !important;
+  text-align: center !important;
+  line-height: 1.4 !important;
+}
+
+.image-placeholder {
+  margin: 40px auto !important;
+  text-align: center !important;
+  padding: 30px !important;
+  border: 2px dashed #ccc !important;
+  background: #f9f9f9 !important;
+  border-radius: 8px !important;
+  width: 100% !important;
+  max-width: 800px !important;
+}
+
+/* Garantir que imagens sempre fiquem centralizadas, mesmo com estilos inline */
+[style*="text-align: center"] img {
+  margin-left: auto !important;
+  margin-right: auto !important;
+  display: block !important;
+}

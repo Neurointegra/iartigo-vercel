@@ -121,17 +121,19 @@ export async function processImageTagsClient(content: string): Promise<string> {
       if (matchingFile) {
         const imageUrl = `/uploads/${matchingFile}`
         const imageHtml = `
-<div class="image-container" style="margin: 30px 0; text-align: center;">
-  <img 
-    src="${imageUrl}" 
-    alt="${cleanImageName}" 
-    style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); display: block; margin: 0 auto;" 
-    onload="console.log('✅ Imagem carregada:', '${imageUrl}')"
-    onerror="console.error('❌ Erro ao carregar imagem:', '${imageUrl}')"
-  />
-  <p style="margin: 10px 0 0 0; font-style: italic; color: #666; font-size: 14px;">
-    Figura: ${cleanImageName}
-  </p>
+<div class="image-container" style="margin: 40px 0; text-align: center; padding: 20px 0; width: 100%; display: flex; flex-direction: column; align-items: center;">
+  <div style="max-width: 800px; width: 100%; text-align: center;">
+    <img 
+      src="${imageUrl}" 
+      alt="${cleanImageName}" 
+      style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.1); display: block; margin: 0 auto;" 
+      onload="console.log('✅ Imagem carregada:', '${imageUrl}')"
+      onerror="console.error('❌ Erro ao carregar imagem:', '${imageUrl}')"
+    />
+    <p style="margin: 15px 0 0 0; font-style: italic; color: #666; font-size: 14px; text-align: center; line-height: 1.4;">
+      Figura: ${cleanImageName}
+    </p>
+  </div>
 </div>`
         
         processedContent = processedContent.replace(fullMatch, imageHtml)
@@ -140,11 +142,11 @@ export async function processImageTagsClient(content: string): Promise<string> {
         console.log(`⚠️ Imagem não encontrada: "${cleanImageName}"`)
         // Manter a tag original para debug
         const placeholderHtml = `
-<div class="image-placeholder" style="margin: 30px 0; text-align: center; padding: 20px; border: 2px dashed #ccc; background: #f9f9f9;">
-  <p style="color: #666; font-style: italic;">
+<div class="image-placeholder" style="margin: 40px 0; text-align: center; padding: 30px; border: 2px dashed #ccc; background: #f9f9f9; border-radius: 8px; width: 100%; max-width: 800px; margin-left: auto; margin-right: auto;">
+  <p style="color: #666; font-style: italic; margin: 0 0 10px 0; font-weight: 500;">
     ❌ Imagem não encontrada: "${cleanImageName}"
   </p>
-  <p style="color: #999; font-size: 12px;">
+  <p style="color: #999; font-size: 12px; margin: 0; line-height: 1.4;">
     Arquivos disponíveis: ${imageFiles.join(', ')}
   </p>
 </div>`
