@@ -6,11 +6,6 @@ export async function POST(request: NextRequest) {
     console.log("📨 Nova requisição de pagamento Hotmart")
 
     const body = await request.json()
-    console.log("📋 Dados recebidos:", {
-      plan_id: body.plan_id,
-      customer_email: body.customer?.email,
-      billing_cycle: body.billing_cycle,
-    })
 
     // Validar dados obrigatórios
     const { plan_id, customer, billing_cycle } = body

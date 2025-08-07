@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { ArrowLeft, Download, Share2, Edit, Save, X, Sparkles, RefreshCw, Trash2, Upload, Image as ImageIcon, BarChart3, FileText, Plus } from 'lucide-react'
+import { ArrowLeft, Download, Share2, Edit, Save, X, Sparkles, RefreshCw, Trash2, Upload, Image as ImageIcon, BarChart3, FileText, Plus, CheckCircle } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/components/ui/use-toast'
@@ -87,6 +87,7 @@ export default function ArticlePage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isEditing, setIsEditing] = useState(false)
+  const [isPublicView, setIsPublicView] = useState(false)
   const [editedContent, setEditedContent] = useState('')
   const [editedTitle, setEditedTitle] = useState('')
   const [editedAbstract, setEditedAbstract] = useState('')
@@ -113,6 +114,8 @@ export default function ArticlePage() {
         if (!response.ok) {
           if (response.status === 404) {
             setError('Artigo não encontrado')
+          } else if (response.status === 403) {
+            setError('Este artigo não está disponível para visualização pública')
           } else {
             setError('Erro ao carregar artigo')
           }
@@ -121,6 +124,11 @@ export default function ArticlePage() {
 
         const data = await response.json()
         setArticle(data)
+        
+        // Verificar se é visualização pública
+        if (data.isPublicView) {
+          setIsPublicView(true)
+        }
         
         // Carregar gráficos salvos se existirem
         if (data.charts) {
@@ -171,8 +179,6 @@ export default function ArticlePage() {
     if (!article) return
     
     try {
-      console.log('Abrindo artigo em janela separada para PDF...');
-      
       toast({
         title: "Gerando PDF",
         description: "Abrindo artigo em nova janela...",
@@ -379,7 +385,7 @@ export default function ArticlePage() {
             
             // Aguardar carregamento completo e mostrar botão
             window.addEventListener('load', function() {
-              console.log('Janela carregada - Clique no botão "Gerar PDF" ou use Ctrl+P');
+              // Janela carregada
             });
           </script>
         </body>
@@ -399,8 +405,6 @@ export default function ArticlePage() {
 
       // Focar na nova janela
       newWindow.focus();
-
-      console.log('Nova janela aberta com sucesso');
 
       toast({
         title: "Janela de PDF aberta!",
@@ -636,6 +640,45 @@ export default function ArticlePage() {
       })
     } finally {
       setIsSaving(false)
+    }
+  }
+
+  const handleMarkAsCompleted = async () => {
+    if (!article) return
+    
+    try {
+      const response = await fetch(`/api/articles/${article.id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          status: 'completed',
+        }),
+      })
+
+      if (response.ok) {
+        const updatedArticle = await response.json()
+        setArticle(updatedArticle)
+        toast({
+          title: "Artigo marcado como concluído!",
+          description: "Agora o artigo pode ser compartilhado publicamente",
+          variant: "default",
+        })
+      } else {
+        toast({
+          title: "Erro ao atualizar",
+          description: "Não foi possível marcar o artigo como concluído.",
+          variant: "destructive",
+        })
+      }
+    } catch (error) {
+      console.error('Erro ao atualizar status:', error)
+      toast({
+        title: "Erro ao atualizar",
+        description: "Ocorreu um erro inesperado. Tente novamente.",
+        variant: "destructive",
+      })
     }
   }
 
@@ -1167,29 +1210,30 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
           size="sm"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
-          Voltar
+          {isPublicView ? 'Voltar' : 'Voltar ao Dashboard'}
         </Button>
 
-        <div className="flex space-x-2">
-          {isEditing ? (
-            <>
-              <Button 
-                onClick={handleCancelEdit} 
-                variant="outline" 
-                size="sm"
-                disabled={isSaving}
-              >
-                <X className="w-4 h-4 mr-2" />
-                Cancelar
-              </Button>
-              <Button 
-                onClick={handleSave} 
-                size="sm"
-                disabled={isSaving}
-                className="bg-green-600 hover:bg-green-700"
-              >
-                {isSaving ? (
-                  <>
+        {!isPublicView && (
+          <div className="flex space-x-2">
+            {isEditing ? (
+              <>
+                <Button 
+                  onClick={handleCancelEdit} 
+                  variant="outline" 
+                  size="sm"
+                  disabled={isSaving}
+                >
+                  <X className="w-4 h-4 mr-2" />
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleSave} 
+                  size="sm"
+                  disabled={isSaving}
+                  className="bg-green-600 hover:bg-green-700"
+                >
+                  {isSaving ? (
+                    <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
                     Salvando...
                   </>
@@ -1211,6 +1255,17 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
                 <Share2 className="w-4 h-4 mr-2" />
                 Compartilhar
               </Button>
+              {article.status !== 'completed' && (
+                <Button 
+                  onClick={handleMarkAsCompleted} 
+                  variant="outline" 
+                  size="sm"
+                  className="bg-blue-600 hover:bg-blue-700 text-white border-blue-600"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Marcar como Concluído
+                </Button>
+              )}
               <Button onClick={exportToPDF} size="sm">
                 <Download className="w-4 h-4 mr-2" />
                 Download PDF
@@ -1226,13 +1281,24 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
               </Button>
             </>
           )}
-        </div>
+          </div>
+        )}
+
+        {/* Para visualização pública, mostrar apenas download PDF */}
+        {isPublicView && (
+          <div className="flex space-x-2">
+            <Button onClick={exportToPDF} size="sm">
+              <Download className="w-4 h-4 mr-2" />
+              Download PDF
+            </Button>
+          </div>
+        )}
       </div>
 
       {/* Article Content */}
       <div className="space-y-6">
         {/* AI Editor */}
-        {isEditing && (
+        {!isPublicView && isEditing && (
           <Card className="border-purple-200 bg-purple-50">
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-purple-700">
@@ -1339,7 +1405,7 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
               <CardTitle className="text-xl">Resumo</CardTitle>
             </CardHeader>
             <CardContent>
-              {isEditing ? (
+              {!isPublicView && isEditing ? (
                 <Textarea
                   value={editedAbstract}
                   onChange={(e) => setEditedAbstract(e.target.value)}
@@ -1360,7 +1426,7 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
               <CardTitle className="text-xl">Palavras-chave</CardTitle>
             </CardHeader>
             <CardContent>
-              {isEditing ? (
+              {!isPublicView && isEditing ? (
                 <Textarea
                   value={editedKeywords}
                   onChange={(e) => setEditedKeywords(e.target.value)}
@@ -1384,7 +1450,7 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
         <Card>
           <CardHeader>
             <CardTitle className="text-xl">Conteúdo</CardTitle>
-            {isEditing && (
+            {!isPublicView && isEditing && (
               <div className="flex flex-wrap gap-2 mt-4">
                 <Button
                   onClick={() => setShowImageUpload(!showImageUpload)}
@@ -1406,7 +1472,7 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
             )}
           </CardHeader>
           <CardContent>
-            {isEditing && showImageUpload && (
+            {!isPublicView && isEditing && showImageUpload && (
               <Card className="mb-4">
                 <CardHeader>
                   <CardTitle className="text-lg">Upload de Imagem</CardTitle>
@@ -1425,7 +1491,7 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
               </Card>
             )}
 
-            {isEditing && showChartGenerator && (
+            {!isPublicView && isEditing && showChartGenerator && (
               <Card className="mb-4">
                 <CardHeader>
                   <CardTitle className="text-lg">Gerador de Gráficos</CardTitle>
@@ -1471,7 +1537,7 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
               </Card>
             )}
 
-            {isEditing && (
+            {!isPublicView && isEditing && (
               <div className="mt-4 p-4 bg-gray-50 rounded-lg border">
                 <h4 className="font-medium text-gray-800 mb-2">📝 Guia de Formatação</h4>
                 <div className="grid md:grid-cols-2 gap-4 text-xs text-gray-600">
@@ -1492,7 +1558,7 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
               </div>
             )}
 
-            {isEditing ? (
+            {!isPublicView && isEditing ? (
               <Textarea
                 id="content-editor"
                 value={editedContent}
@@ -1546,7 +1612,7 @@ INSTRUÇÕES CRÍTICAS DE PRESERVAÇÃO:
             )}
 
             {/* Controle de imagens (apenas no modo de edição) */}
-            {isEditing && attachedImages.length > 0 && (
+            {!isPublicView && isEditing && attachedImages.length > 0 && (
               <div className="mt-6">
                 <h4 className="font-semibold mb-2">Imagens no Artigo ({attachedImages.length})</h4>
                 <div className="text-sm text-gray-600 space-y-2">

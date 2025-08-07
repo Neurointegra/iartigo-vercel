@@ -133,10 +133,8 @@ export default function GeneratorPage() {
       if (type === 'image') {
         try {
           fileContent = await uploadImageFile(file)
-          console.log('🖼️ Imagem salva em:', fileContent)
           
         } catch (error) {
-          console.log('Erro ao fazer upload da imagem:', error)
           toast({
             title: "Erro no upload",
             description: "Não foi possível fazer upload da imagem. Tente novamente.",
@@ -148,9 +146,8 @@ export default function GeneratorPage() {
         try {
           // Para arquivos de dados, sempre tentar ler o conteúdo como texto
           fileContent = await readFileContent(file)
-          console.log(`📄 Conteúdo lido do arquivo ${file.name}:`, fileContent?.substring(0, 200) + '...')
         } catch (error) {
-          console.log('Não foi possível ler o conteúdo do arquivo:', error)
+          // Erro silencioso, arquivo será enviado sem conteúdo
         }
       }
       
@@ -256,13 +253,6 @@ export default function GeneratorPage() {
         imageUrl: file.imageUrl, // Incluir URL específica para imagens
         description: file.description // Incluir descrição visual das imagens
       }))
-      
-      console.log('📁 Arquivos preparados para envio:', filesData.map(f => ({
-        name: f.name,
-        type: f.type,
-        hasContent: !!f.content,
-        contentLength: f.content?.length || 0
-      })))
 
       // Preparar dados para envio
       const articleData = {
@@ -318,12 +308,6 @@ export default function GeneratorPage() {
         })
         return;
       }
-
-      console.log('Tentando salvar artigo com dados:', {
-        title: formData.title,
-        userId: user?.id,
-        contentLength: additionalContent.length
-      });
 
       const articleResponse = await fetch('/api/articles', {
         method: 'POST',

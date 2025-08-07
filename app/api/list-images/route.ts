@@ -3,11 +3,7 @@ import { listUploadedImages } from '@/lib/utils/image-processor'
 
 export async function GET() {
   try {
-    console.log('📸 API list-images chamada')
     const images = await listUploadedImages()
-    
-    console.log(`✅ Encontradas ${images.length} imagens:`)
-    images.forEach(img => console.log(`  - ${img}`))
     
     const response = {
       success: true,
@@ -18,8 +14,6 @@ export async function GET() {
         originalName: filename.replace(/^\d+_/, '') // Remove timestamp
       }))
     }
-    
-    console.log('📤 Retornando resposta da API:', response)
     
     return NextResponse.json(response)
   } catch (error) {

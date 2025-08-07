@@ -8,7 +8,6 @@ import path from 'path'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log('Dados recebidos na API generate-article:', JSON.stringify(body, null, 2))
     
     const { 
       articleId,
@@ -26,28 +25,11 @@ export async function POST(request: NextRequest) {
       includeTables // Indicador para gerar tabelas
     } = body
 
-    if (attachedFiles && attachedFiles.length > 0) {
-      console.log('Arquivos anexados recebidos:')
-      attachedFiles.forEach((file: any, index: number) => {
-        console.log(`  Arquivo ${index + 1}:`, {
-          name: file.name,
-          fileName: file.fileName,
-          type: file.type,
-          size: file.size
-        })
-      })
-    }
-
     // Verificar descrições manuais das imagens
     if (attachedFiles && attachedFiles.length > 0) {
-      console.log('� Verificando descrições manuais das imagens...')
-      
       for (const file of attachedFiles) {
         if (file.type === 'image') {
-          if (file.description) {
-            console.log(`✅ Descrição manual encontrada para ${file.fileName}: ${file.description}`)
-          } else {
-            console.warn(`⚠️ Imagem ${file.fileName} sem descrição manual, usando padrão`)
+          if (!file.description) {
             file.description = 'Imagem relacionada ao tema da pesquisa'
           }
         }
@@ -81,7 +63,6 @@ export async function POST(request: NextRequest) {
 
     // Gerar resumo se não foi fornecido
     if (!abstract || abstract.trim().length < 20) {
-      console.log('📝 Gerando resumo automático...')
       try {
         const generatedAbstract = await GeminiService.generateSimpleAbstract(title, generatedContent)
         
@@ -99,7 +80,6 @@ export async function POST(request: NextRequest) {
           `$1${resumoSection}`
         )
         
-        console.log('✅ Resumo gerado e inserido!')
       } catch (error) {
         console.error('❌ Erro ao gerar resumo:', error)
       }

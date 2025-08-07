@@ -4,14 +4,10 @@ import crypto from "crypto"
 export async function POST(request: NextRequest) {
   try {
     console.log("📨 Webhook recebido do Hotmart")
-    console.log("Headers:", Object.fromEntries(request.headers.entries()))
 
     // Obter dados da requisição
     const body = await request.text()
     const hotmartSignature = request.headers.get("x-hotmart-hottok")
-
-    console.log("📝 Body recebido:", body.substring(0, 200) + "...")
-    console.log("🔐 Hotmart Signature:", hotmartSignature)
 
     // Validar assinatura do webhook Hotmart
     if (!validateHotmartSignature(body, hotmartSignature)) {
@@ -23,7 +19,6 @@ export async function POST(request: NextRequest) {
     const { event, data } = webhookData
 
     console.log(`🔔 Evento: ${event} | Transação: ${data?.transaction || "N/A"}`)
-    console.log("📊 Dados da transação:", JSON.stringify(data, null, 2))
 
     // Processar evento baseado no tipo
     const result = await processHotmartEvent(event, data)
@@ -53,7 +48,6 @@ function validateHotmartSignature(body: string, signature: string | null): boole
     console.warn("⚠️ Signature ou webhook token não fornecidos")
     // Em desenvolvimento, pode pular validação
     if (process.env.NODE_ENV === "development") {
-      console.log("🔓 Pulando validação de signature em desenvolvimento")
       return true
     }
     return false
@@ -65,11 +59,6 @@ function validateHotmartSignature(body: string, signature: string | null): boole
       .createHash("sha256")
       .update(body + process.env.HOTMART_WEBHOOK_TOKEN)
       .digest("hex")
-
-    console.log("🔍 Validando signatures:", {
-      expected: expectedSignature.substring(0, 10) + "...",
-      provided: signature.substring(0, 10) + "...",
-    })
 
     return crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
   } catch (error) {

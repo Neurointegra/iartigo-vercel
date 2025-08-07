@@ -6,7 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
-import { Textarea } from "@/components/ui/textarea"
 import { useToast } from "@/components/ui/use-toast"
 import { formatDate } from "@/lib/date-utils"
 import {
@@ -36,18 +35,13 @@ import {
   Users,
   Search,
   Book,
-  ExternalLink,
   Bell,
   Menu,
   LogOut,
   User,
   CreditCard,
-  HelpCircle,
   History,
-  Star,
-  TrendingUp,
   Calendar,
-  Clock,
   CheckCircle,
   Trash2,
 } from "lucide-react"
@@ -98,8 +92,6 @@ export default function DashboardPage() {
   const [generatedArticle, setGeneratedArticle] = useState("")
   const [literatureSuggestions, setLiteratureSuggestions] = useState<LiteratureSuggestion[]>([])
   const [recentArticles, setRecentArticles] = useState<RecentArticle[]>([])
-  const [quickPrompt, setQuickPrompt] = useState("")
-  const [isQuickGenerating, setIsQuickGenerating] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [articleToDelete, setArticleToDelete] = useState<{id: string, title: string} | null>(null)
   const [authors, setAuthors] = useState<Author[]>([
@@ -177,96 +169,6 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await logout()
     router.push('/')
-  }
-
-  const handleQuickGenerate = async () => {
-    if (!quickPrompt.trim()) {
-      toast({
-        title: "Descrição necessária",
-        description: "Por favor, digite uma descrição para o artigo",
-        variant: "destructive",
-      })
-      return
-    }
-
-    setIsQuickGenerating(true)
-    try {
-      // Criar autor padrão baseado no usuário logado
-      const defaultAuthor = {
-        id: "1",
-        name: user?.name || "",
-        institution: user?.institution || "",
-        email: user?.email || "",
-        department: user?.department || "",
-        city: user?.city || "",
-        country: user?.country || "Brasil",
-      }
-
-      // Dados básicos para geração rápida
-      const articleData = {
-        title: quickPrompt.slice(0, 100), // Usar o prompt como título inicial
-        abstract: "",
-        keywords: "",
-        citationStyle: "ABNT",
-        targetJournal: "",
-        fieldOfStudy: "Geral",
-        methodology: "Revisão de Literatura",
-        includeCharts: true,
-        chartIds: ['metodologia_processo', 'resultados_principais', 'analise_comparativa'],
-        includeTables: false,
-        researchObjectives: quickPrompt,
-        hypothesis: "",
-        sampleSize: "",
-        dataCollection: "",
-        statisticalAnalysis: "",
-        authors: [defaultAuthor], // Usar dados do usuário como autor principal
-        literatureSuggestions: [],
-        userId: user?.id
-      }
-
-      const content = await generateArticle(articleData)
-      
-      // Criar novo artigo no banco
-      const response = await fetch('/api/articles', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: quickPrompt.slice(0, 100),
-          content: content,
-          abstract: "",
-          keywords: "",
-          status: "draft",
-          citationStyle: "ABNT",
-          targetJournal: "",
-          fieldOfStudy: "Geral",
-          userId: user?.id
-        }),
-      })
-
-      if (response.ok) {
-        const newArticle = await response.json()
-        // Redirecionar para visualizar o artigo criado
-        router.push(`/article/${newArticle.id}`)
-        setQuickPrompt("") // Limpar o campo
-      } else {
-        toast({
-          title: "Erro ao salvar",
-          description: "Não foi possível salvar o artigo",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      console.error('Erro ao gerar artigo:', error)
-      toast({
-        title: "Erro na geração",
-        description: "Erro ao gerar artigo. Tente novamente.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsQuickGenerating(false)
-    }
   }
 
   if (isLoading) {
@@ -565,65 +467,6 @@ export default function DashboardPage() {
                 </p>
               </div>
 
-              {/* Stats Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        <FileText className="h-8 w-8 text-blue-600" />
-                      </div>
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-500">Artigos Gerados</p>
-                        <p className="text-2xl font-bold text-gray-900">12</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        <TrendingUp className="h-8 w-8 text-green-600" />
-                      </div>
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-500">Este Mês</p>
-                        <p className="text-2xl font-bold text-gray-900">{user.articlesUsed}</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        <Star className="h-8 w-8 text-yellow-600" />
-                      </div>
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-500">Qualidade Média</p>
-                        <p className="text-2xl font-bold text-gray-900">9.2</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                <Card>
-                  <CardContent className="p-6">
-                    <div className="flex items-center">
-                      <div className="flex-shrink-0">
-                        <Clock className="h-8 w-8 text-purple-600" />
-                      </div>
-                      <div className="ml-4">
-                        <p className="text-sm font-medium text-gray-500">Tempo Economizado</p>
-                        <p className="text-2xl font-bold text-gray-900">48h</p>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
               {/* Usage Progress */}
               <Card className="mb-8">
                 <CardHeader>
@@ -646,61 +489,14 @@ export default function DashboardPage() {
                 </CardContent>
               </Card>
 
-              <div className="grid lg:grid-cols-3 gap-8">
-                {/* Quick AI Generator */}
-                <div className="lg:col-span-3 mb-6">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5 text-purple-600" />
-                        Gerador Rápido de Artigo
-                      </CardTitle>
-                      <CardDescription>
-                        Descreva o que você quer pesquisar e a IA criará um artigo científico completo
-                      </CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-4">
-                        <Textarea
-                          placeholder="Ex: Impactos da inteligência artificial na educação brasileira, métodos de análise de dados em saúde pública, sustentabilidade em empresas de tecnologia..."
-                          value={quickPrompt}
-                          onChange={(e) => setQuickPrompt(e.target.value)}
-                          className="min-h-[100px] resize-none"
-                        />
-                        <div className="flex justify-between items-center">
-                          <p className="text-sm text-gray-500">
-                            {quickPrompt.length}/500 caracteres
-                          </p>
-                          <Button 
-                            onClick={handleQuickGenerate}
-                            disabled={isQuickGenerating || !quickPrompt.trim()}
-                            className="bg-purple-600 hover:bg-purple-700"
-                          >
-                            {isQuickGenerating ? (
-                              <>
-                                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-                                Gerando...
-                              </>
-                            ) : (
-                              <>
-                                <Sparkles className="h-4 w-4 mr-2" />
-                                Gerar Artigo com IA
-                              </>
-                            )}
-                          </Button>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-
                 {/* Quick Actions */}
-                <div className="lg:col-span-2">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5" />
-                        Ações Rápidas
+                <div className="grid lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-2">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Sparkles className="h-5 w-5" />
+                          Ações Rápidas
                       </CardTitle>
                       <CardDescription>Comece a criação de um artigo científico com IA</CardDescription>
                     </CardHeader>
@@ -720,11 +516,7 @@ export default function DashboardPage() {
                           <span>Buscar Literatura</span>
                           <span className="text-xs opacity-75">Encontrar referências</span>
                         </Button>
-                        <Button variant="outline" className="h-24 flex-col gap-2" size="lg">
-                          <BarChart3 className="h-6 w-6" />
-                          <span>Análise de Dados</span>
-                          <span className="text-xs opacity-75">Gerar gráficos</span>
-                        </Button>
+
                         <Button 
                           variant="outline" 
                           className="h-24 flex-col gap-2" 
@@ -821,10 +613,11 @@ export default function DashboardPage() {
                       </div>
                     </CardContent>
                   </Card>
-                </div>
+                  </div>
 
                 {/* Navigation Menu */}
-                <div className="space-y-6">
+                <div className="lg:col-span-1">
+                  <div className="space-y-6">
                   {/* Menu de Navegação */}
                   <Card>
                     <CardHeader>
@@ -856,13 +649,7 @@ export default function DashboardPage() {
                           <Book className="text-gray-400 mr-3 h-5 w-5" />
                           Literatura
                         </Button>
-                        <Button
-                          variant="ghost"
-                          className="w-full justify-start text-gray-600 hover:bg-gray-50 hover:text-gray-900"
-                        >
-                          <BarChart3 className="text-gray-400 mr-3 h-5 w-5" />
-                          Estatísticas
-                        </Button>
+
                       </nav>
                     </CardContent>
                   </Card>
@@ -911,32 +698,7 @@ export default function DashboardPage() {
                       </div>
                     </CardContent>
                   </Card>
-
-                  {/* Support */}
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <HelpCircle className="h-5 w-5" />
-                        Precisa de Ajuda?
-                      </CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-3">
-                        <Button variant="outline" size="sm" className="w-full justify-start">
-                          <Book className="h-4 w-4 mr-2" />
-                          Central de Ajuda
-                        </Button>
-                        <Button variant="outline" size="sm" className="w-full justify-start">
-                          <ExternalLink className="h-4 w-4 mr-2" />
-                          Tutoriais
-                        </Button>
-                        <Button variant="outline" size="sm" className="w-full justify-start">
-                          <Users className="h-4 w-4 mr-2" />
-                          Contato
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                </div>
                 </div>
               </div>
             </div>

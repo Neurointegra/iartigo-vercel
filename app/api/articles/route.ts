@@ -37,13 +37,6 @@ export async function POST(request: NextRequest) {
   try {
     const data = await request.json()
     
-    console.log('API articles POST - dados recebidos:', {
-      title: data.title,
-      userId: data.userId,
-      hasCharts: !!data.charts,
-      chartsType: typeof data.charts
-    });
-    
     if (!data.userId) {
       console.error('API articles POST - userId ausente');
       return NextResponse.json(
@@ -54,7 +47,6 @@ export async function POST(request: NextRequest) {
     
     const article = await ArticleService.create(data)
     
-    console.log('API articles POST - artigo criado com sucesso:', article.id);
     return NextResponse.json(article, { status: 201 })
   } catch (error) {
     console.error('Error creating article:', error)

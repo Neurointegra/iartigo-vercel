@@ -93,7 +93,6 @@ export default function ArticleContentRenderer({
 
         // Processar tags de gráficos no conteúdo que não estão em attachedCharts
         const chartTags = [...htmlContent.matchAll(/\[CHART:([^\]]+)\]/g)]
-        console.log('Tags de gráfico encontradas no conteúdo:', chartTags.map(match => match[0]))
         
         for (const match of chartTags) {
           const fullTag = match[0] // [CHART:distribution_xyz789]
@@ -105,8 +104,6 @@ export default function ArticleContentRenderer({
           )
           
           if (!alreadyProcessed) {
-            console.log(`❌ Tag de gráfico não processada encontrada: ${fullTag}`)
-            
             // Ao invés de criar gráfico com dados inválidos, mostrar mensagem explicativa
             const fallbackMessage = `
               <div style="margin: 50px 0; padding: 20px 0;">
@@ -121,15 +118,11 @@ export default function ArticleContentRenderer({
               </div>`
             
             htmlContent = htmlContent.replace(fullTag, fallbackMessage)
-            console.log(`⚠️ Tag ${fullTag} substituída por mensagem explicativa`)
           }
         }
 
         // Aplicar formatação de texto
         const formattedContent = formatText(htmlContent)
-        
-        // Debug: verificar o HTML final
-        console.log('🔍 HTML final processado (últimos 500 caracteres):', formattedContent.slice(-500))
         
         // Converter para elementos React
         const elements = [<div key="content" dangerouslySetInnerHTML={{ __html: formattedContent }} />]
