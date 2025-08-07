@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Progress } from "@/components/ui/progress"
+import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/use-toast"
 import { formatDate } from "@/lib/date-utils"
 import {
@@ -92,6 +93,9 @@ export default function DashboardPage() {
   const [generatedArticle, setGeneratedArticle] = useState("")
   const [literatureSuggestions, setLiteratureSuggestions] = useState<LiteratureSuggestion[]>([])
   const [recentArticles, setRecentArticles] = useState<RecentArticle[]>([])
+  const [completedArticles, setCompletedArticles] = useState<RecentArticle[]>([])
+  const [showLiterature, setShowLiterature] = useState(false)
+  const [literatureSearchTerm, setLiteratureSearchTerm] = useState("")
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [articleToDelete, setArticleToDelete] = useState<{id: string, title: string} | null>(null)
   const [authors, setAuthors] = useState<Author[]>([
@@ -156,10 +160,18 @@ export default function DashboardPage() {
 
   const loadUserArticles = async () => {
     try {
+      // Carregar artigos recentes
       const response = await fetch(`/api/articles?userId=${user?.id}&limit=5`)
       if (response.ok) {
         const data = await response.json()
         setRecentArticles(data.articles || [])
+      }
+
+      // Carregar artigos completos para literatura
+      const completedResponse = await fetch(`/api/articles?userId=${user?.id}&status=completed`)
+      if (completedResponse.ok) {
+        const completedData = await completedResponse.json()
+        setCompletedArticles(completedData.articles || [])
       }
     } catch (error) {
       console.error('Error loading articles:', error)
@@ -243,6 +255,21 @@ export default function DashboardPage() {
       setIsLoadingLiterature(false)
     }
   }
+
+  const handleShowLiterature = () => {
+    setShowLiterature(true)
+    setLiteratureSearchTerm("") // Limpar pesquisa ao abrir
+    toast({
+      title: "Literatura Local",
+      description: `Mostrando ${completedArticles.length} artigos completos como referências.`,
+    })
+  }
+
+  // Filtrar artigos completos baseado no termo de pesquisa
+  const filteredCompletedArticles = completedArticles.filter(article => 
+    article.title?.toLowerCase().includes(literatureSearchTerm.toLowerCase()) ||
+    article.journal?.toLowerCase().includes(literatureSearchTerm.toLowerCase())
+  )
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -511,7 +538,12 @@ export default function DashboardPage() {
                           <span>Artigo Avançado</span>
                           <span className="text-xs opacity-75">IA para gerar artigos</span>
                         </Button>
-                        <Button variant="outline" className="h-24 flex-col gap-2" size="lg">
+                        <Button 
+                          variant="outline" 
+                          className="h-24 flex-col gap-2" 
+                          size="lg"
+                          onClick={handleShowLiterature}
+                        >
                           <Search className="h-6 w-6" />
                           <span>Buscar Literatura</span>
                           <span className="text-xs opacity-75">Encontrar referências</span>
@@ -613,6 +645,94 @@ export default function DashboardPage() {
                       </div>
                     </CardContent>
                   </Card>
+
+                  {/* Literatura - Artigos Completos */}
+                  {showLiterature && (
+                    <Card className="mt-8">
+                      <CardHeader>
+                        <CardTitle className="flex items-center justify-between">
+                          <span className="flex items-center gap-2">
+                            <Book className="h-5 w-5" />
+                            Literatura - Artigos Completos
+                          </span>
+                          <Button 
+                            variant="ghost" 
+                            size="sm"
+                            onClick={() => setShowLiterature(false)}
+                          >
+                            Fechar
+                          </Button>
+                        </CardTitle>
+                        <CardDescription>
+                          Artigos marcados como completos que podem ser usados como referência
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {/* Barra de pesquisa */}
+                        <div className="mb-4">
+                          <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                            <Input
+                              placeholder="Pesquisar por título ou revista..."
+                              value={literatureSearchTerm}
+                              onChange={(e) => setLiteratureSearchTerm(e.target.value)}
+                              className="pl-10"
+                            />
+                          </div>
+                          {literatureSearchTerm && (
+                            <p className="text-sm text-gray-500 mt-2">
+                              {filteredCompletedArticles.length} de {completedArticles.length} artigos encontrados
+                            </p>
+                          )}
+                        </div>
+
+                        {completedArticles.length === 0 ? (
+                          <div className="text-center py-8 text-gray-500">
+                            <Book className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>Nenhum artigo completo encontrado</p>
+                            <p className="text-sm">Complete alguns artigos para vê-los aqui como referências</p>
+                          </div>
+                        ) : filteredCompletedArticles.length === 0 ? (
+                          <div className="text-center py-8 text-gray-500">
+                            <Search className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                            <p>Nenhum artigo encontrado</p>
+                            <p className="text-sm">Tente ajustar o termo de pesquisa</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-4">
+                            {filteredCompletedArticles.map((article) => (
+                              <div
+                                key={article.id}
+                                className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                                onClick={() => router.push(`/article/${article.id}`)}
+                              >
+                                <div className="flex-1">
+                                  <h3 className="font-medium text-gray-900 mb-2">{article.title}</h3>
+                                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-4 w-4" />
+                                      {formatDate(article.createdAt)}
+                                    </span>
+                                    <span>{article.wordCount > 0 ? `${article.wordCount} palavras` : "—"}</span>
+                                    <span>{article.journal}</span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                  <Badge className="bg-green-100 text-green-800">
+                                    <CheckCircle className="h-3 w-3 mr-1" />
+                                    Completo
+                                  </Badge>
+                                  <Button variant="ghost" size="sm">
+                                    <Eye className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
                   </div>
 
                 {/* Navigation Menu */}

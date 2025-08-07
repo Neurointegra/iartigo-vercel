@@ -182,6 +182,46 @@ export class ArticleService {
     }
   }
 
+  // Get articles by user ID and status
+  static async getByUserIdAndStatus(userId: string, status: string, page = 1, limit = 10) {
+    const skip = (page - 1) * limit
+    
+    const [articles, total] = await Promise.all([
+      prisma.article.findMany({
+        where: { 
+          userId,
+          status 
+        },
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        include: {
+          authors: {
+            orderBy: { order: 'asc' },
+          },
+          _count: {
+            select: {
+              literatureSuggestions: true,
+            },
+          },
+        },
+      }),
+      prisma.article.count({
+        where: { 
+          userId,
+          status 
+        },
+      }),
+    ])
+
+    return {
+      articles,
+      total,
+      pages: Math.ceil(total / limit),
+      currentPage: page,
+    }
+  }
+
   // Get recent articles
   static async getRecent(userId: string, limit = 5) {
     return await prisma.article.findMany({

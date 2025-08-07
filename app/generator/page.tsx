@@ -499,36 +499,6 @@ export default function GeneratorPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                {/* Checkbox para transformar tese */}
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="transformThesis"
-                    checked={formData.transformThesis}
-                    onCheckedChange={(checked) => handleInputChange('transformThesis', checked as boolean)}
-                  />
-                  <Label htmlFor="transformThesis">Quero transformar minha tese ou dissertação neste artigo.</Label>
-                </div>
-
-                {/* Upload de tese/dissertação */}
-                {formData.transformThesis && (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                    <div className="text-center">
-                      <FileText className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="mt-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => handleFileUpload('thesis')}
-                        >
-                          Anexar Tese/Dissertação (PDF, DOCX)
-                        </Button>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Envie sua tese para ser transformada em artigo
-                      </p>
-                    </div>
-                  </div>
-                )}
-
                 {/* Checkbox para dados coletados */}
                 <div className="flex items-center space-x-2">
                   <Checkbox

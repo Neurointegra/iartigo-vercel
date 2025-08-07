@@ -8,6 +8,7 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const search = searchParams.get('search')
+    const status = searchParams.get('status')
     
     if (!userId) {
       return NextResponse.json(
@@ -19,6 +20,8 @@ export async function GET(request: NextRequest) {
     let result
     if (search) {
       result = await ArticleService.search(userId, search, page, limit)
+    } else if (status) {
+      result = await ArticleService.getByUserIdAndStatus(userId, status, page, limit)
     } else {
       result = await ArticleService.getByUserId(userId, page, limit)
     }
