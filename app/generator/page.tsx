@@ -395,9 +395,9 @@ export default function GeneratorPage() {
           <p className="text-gray-600">Crie artigos científicos profissionais com inteligência artificial</p>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="max-w-4xl mx-auto">
           {/* Formulário Principal */}
-          <div className="lg:col-span-2 space-y-6">
+          <div className="space-y-6">
             {/* Informações Básicas */}
             <Card>
               <CardHeader>
@@ -644,10 +644,7 @@ export default function GeneratorPage() {
                 )}
               </CardContent>
             </Card>
-          </div>
 
-          {/* Painel Lateral */}
-          <div className="space-y-6">
             {/* Botão de Geração */}
             <Card>
               <CardContent className="pt-6">
@@ -703,31 +700,6 @@ export default function GeneratorPage() {
                 </CardContent>
               </Card>
             )}
-
-            {/* Informações */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Dicas</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2 text-sm text-gray-600">
-                <div className="flex items-start gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span>Preencha todos os campos obrigatórios (*)</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span>Use palavras-chave específicas para melhor resultado</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle className="h-4 w-4 text-green-500 mt-0.5 flex-shrink-0" />
-                  <span>Arquivos suportados: PDF, DOCX, CSV, Excel, TXT</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <AlertCircle className="h-4 w-4 text-orange-500 mt-0.5 flex-shrink-0" />
-                  <span><strong>Gráficos requerem dados:</strong> anexe arquivos CSV/Excel</span>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
 
