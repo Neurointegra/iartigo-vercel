@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "mysql"
   url      = env("DATABASE_URL")
 }
 
@@ -12,6 +12,7 @@ model User {
   email            String    @unique
   password         String
   name             String
+  cpf              String    // CPF do usuário (obrigatório)
   institution      String?
   department       String?
   city             String?
@@ -24,10 +25,16 @@ model User {
   articlesUsed     Int       @default(0)
   isEmailVerified  Boolean   @default(false)
   lastLoginAt      DateTime?
+  // Campos para controle de assinatura Asaas
+  subscriptionId   String?   // ID da assinatura no Asaas
+  subscriptionStatus String? // active, inactive, pending, cancelled
+  subscriptionExpiresAt DateTime? // Data de expiração da assinatura
+  subscriptionPaidAt DateTime? // Data do último pagamento
   createdAt        DateTime  @default(now())
   updatedAt        DateTime  @updatedAt
   articles         Article[]
   payments         Payment[]
+  articleRequests  ArticleRequest[]
 
   @@map("users")
 }
@@ -100,7 +107,7 @@ model LiteratureSuggestion {
 
 model Payment {
   id            String    @id @default(cuid())
-  hotmartId     String?   @unique
+  asaasId       String?   @unique // ID do pagamento no Asaas
   amount        Float
   currency      String    @default("BRL")
   status        String    @default("pending")
@@ -109,6 +116,12 @@ model Payment {
   checkoutUrl   String?
   paymentMethod String?
   transactionId String?
+  // Campos específicos do Asaas
+  asaasCustomerId String? // ID do cliente no Asaas
+  asaasSubscriptionId String? // ID da assinatura no Asaas
+  dueDate       DateTime? // Data de vencimento
+  description   String?   // Descrição do pagamento
+  externalReference String? // Referência externa (ID do usuário)
   processedAt   DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
@@ -145,4 +158,32 @@ model Statistics {
   popularJournals  String?
 
   @@map("statistics")
+}
+
+model ArticleRequest {
+  id              String   @id @default(cuid())
+  requestId       Int      // ID retornado pela API externa
+  userId          String
+  title           String
+  status          String   @default("pending") // pending, processing, completed, error
+  statusMessage   String?  // Mensagem de status da API
+  authorSSN       String?  // CPF do autor
+  resume          String?
+  keywords        String?
+  introduction    String?
+  articleType     String?
+  justification   String?  // Campo justification da API
+  objective       String
+  literatureReview String?
+  methodology     String?
+  discussion      String?
+  conclusion      String?
+  files           String?  // JSON com informações dos arquivos enviados
+  downloadUrl     String?  // URL para download quando concluído
+  requestUrl      String?  // URL da API para verificar status/download
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("article_requests")
 }

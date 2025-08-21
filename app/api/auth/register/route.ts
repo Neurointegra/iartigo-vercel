@@ -7,7 +7,7 @@ const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, name, institution, department, role, area, plan } = await request.json()
+    const { email, password, name, cpf, institution, department, role, area, plan } = await request.json()
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -70,6 +70,7 @@ export async function POST(request: NextRequest) {
       email,
       password: hashedPassword,
       name,
+      cpf: cpf || undefined,
       institution: institution || undefined,
       department: department || area || undefined,
       ...planConfig,

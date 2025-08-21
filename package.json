@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "build": "next build",
+    "build": "prisma generate && next build",
     "dev": "next dev",
     "lint": "next lint",
-    "start": "next start"
+    "start": "next start",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@google/genai": "^1.12.0",
@@ -56,6 +57,7 @@
     "jsonwebtoken": "^9.0.2",
     "jspdf": "^3.0.1",
     "lucide-react": "^0.454.0",
+    "mysql2": "^3.14.3",
     "next": "15.2.4",
     "next-themes": "latest",
     "prisma": "^6.13.0",
@@ -67,10 +69,10 @@
     "react-resizable-panels": "latest",
     "recharts": "latest",
     "sonner": "latest",
-    "sqlite3": "^5.1.7",
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "vaul": "latest",
+    "vercel": "^46.0.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {

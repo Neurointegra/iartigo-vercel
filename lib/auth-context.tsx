@@ -6,6 +6,7 @@ interface User {
   id: string
   email: string
   name: string
+  cpf: string
   institution?: string
   department?: string
   city?: string
@@ -18,6 +19,11 @@ interface User {
   articlesUsed: number
   isEmailVerified: boolean
   lastLoginAt?: string
+  // Campos para controle de assinatura Asaas
+  subscriptionId?: string
+  subscriptionStatus?: string
+  subscriptionExpiresAt?: string
+  subscriptionPaidAt?: string
   createdAt: string
   updatedAt: string
 }
@@ -36,6 +42,7 @@ interface RegisterData {
   email: string
   password: string
   name: string
+  cpf: string
   institution?: string
   department?: string
   role?: string

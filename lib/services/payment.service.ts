@@ -6,8 +6,14 @@ export type CreatePaymentData = {
   planType: string
   creditsAmount?: number
   userId: string
-  hotmartId?: string
   checkoutUrl?: string
+  // Campos específicos do Asaas
+  asaasId?: string
+  asaasCustomerId?: string
+  asaasSubscriptionId?: string
+  dueDate?: Date
+  description?: string
+  externalReference?: string
 }
 
 export type UpdatePaymentData = {
@@ -15,7 +21,13 @@ export type UpdatePaymentData = {
   paymentMethod?: string
   transactionId?: string
   processedAt?: Date
-  hotmartId?: string
+  // Campos específicos do Asaas
+  asaasId?: string
+  asaasCustomerId?: string
+  asaasSubscriptionId?: string
+  dueDate?: Date
+  description?: string
+  externalReference?: string
 }
 
 export class PaymentService {
@@ -39,10 +51,10 @@ export class PaymentService {
     })
   }
 
-  // Get payment by Hotmart ID
-  static async getByHotmartId(hotmartId: string) {
+  // Get payment by Asaas ID
+  static async getByAsaasId(asaasId: string) {
     return await prisma.payment.findUnique({
-      where: { hotmartId },
+      where: { asaasId },
       include: {
         user: true,
       },
@@ -60,10 +72,10 @@ export class PaymentService {
     })
   }
 
-  // Update payment by Hotmart ID
-  static async updateByHotmartId(hotmartId: string, data: UpdatePaymentData) {
+  // Update payment by Asaas ID
+  static async updateByAsaasId(asaasId: string, data: UpdatePaymentData) {
     return await prisma.payment.update({
-      where: { hotmartId },
+      where: { asaasId },
       data,
       include: {
         user: true,

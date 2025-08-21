@@ -24,6 +24,7 @@ export default function RegisterPage() {
   const [formData, setFormData] = useState({
     name: "",
     email: "",
+    cpf: "",
     password: "",
     confirmPassword: "",
     institution: "",
@@ -40,6 +41,10 @@ export default function RegisterPage() {
     
     if (step === 1) {
       // Validações do primeiro passo
+      if (!formData.cpf || formData.cpf.length < 11) {
+        setError("CPF é obrigatório e deve ter 11 dígitos")
+        return
+      }
       if (formData.password !== formData.confirmPassword) {
         setError("As senhas não coincidem")
         return
@@ -58,6 +63,7 @@ export default function RegisterPage() {
       email: formData.email,
       password: formData.password,
       name: formData.name,
+      cpf: formData.cpf,
       institution: formData.institution,
       department: formData.area,
       role: formData.role,
@@ -169,6 +175,29 @@ export default function RegisterPage() {
                         required
                       />
                     </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="cpf">CPF *</Label>
+                    <div className="relative">
+                      <User className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="cpf"
+                        type="text"
+                        placeholder="000.000.000-00"
+                        className="pl-10"
+                        value={formData.cpf}
+                        onChange={(e) => {
+                          const value = e.target.value.replace(/\D/g, '').replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4')
+                          setFormData({ ...formData, cpf: value })
+                        }}
+                        maxLength={14}
+                        required
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500">
+                      Campo obrigatório para utilizar os recursos da plataforma
+                    </p>
                   </div>
 
                   <div className="space-y-2">

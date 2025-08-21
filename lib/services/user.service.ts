@@ -4,6 +4,7 @@ export type CreateUserData = {
   email: string
   password: string
   name: string
+  cpf: string
   institution?: string
   department?: string
   city?: string
