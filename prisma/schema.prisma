@@ -137,7 +137,7 @@ model Template {
   description  String?
   category     String
   fieldOfStudy String?
-  structure    String
+  structure    String @db.Text
   isPublic     Boolean  @default(true)
   usageCount   Int      @default(0)
   createdAt    DateTime @default(now())
