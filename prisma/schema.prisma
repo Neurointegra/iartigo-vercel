@@ -187,3 +187,14 @@ model ArticleRequest {
 
   @@map("article_requests")
 }
+
+model PasswordReset {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  used      Boolean  @default(false)
+
+  @@map("password_resets")
+}

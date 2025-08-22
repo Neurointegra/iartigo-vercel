@@ -19,6 +19,7 @@ import {
   ArrowLeft,
 } from "lucide-react"
 import Link from "next/link"
+import { PaymentModal } from "@/components/PaymentModal"
 
 interface Plan {
   id: string
@@ -93,6 +94,8 @@ export default function PlansPage() {
   const router = useRouter()
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null)
   const [isCreatingPayment, setIsCreatingPayment] = useState(false)
+  const [showPaymentModal, setShowPaymentModal] = useState(false)
+  const [paymentData, setPaymentData] = useState<any>(null)
 
   const handleSelectPlan = async (planId: string) => {
     if (!user) {
@@ -141,17 +144,18 @@ export default function PlansPage() {
         throw new Error(errorData.error || 'Erro ao criar pagamento')
       }
 
-      const paymentData = await response.json()
+      const paymentResponse = await response.json()
 
-      if (paymentData.success && paymentData.data.checkoutUrl) {
+      if (paymentResponse.success && paymentResponse.data.checkoutUrl) {
+        // Salvar dados do pagamento e mostrar modal
+        setPaymentData(paymentResponse.data)
+        setShowPaymentModal(true)
+        
         toast({
           title: "Pagamento criado!",
-          description: "Redirecionando para o checkout...",
+          description: "Abrindo modal de pagamento...",
           variant: "default",
         })
-
-        // Redirecionar para o checkout do Asaas
-        window.location.href = paymentData.data.checkoutUrl
       } else {
         throw new Error('URL de checkout não fornecida')
       }
@@ -168,6 +172,17 @@ export default function PlansPage() {
     }
   }
 
+  const handlePaymentSuccess = () => {
+    toast({
+      title: "Pagamento confirmado!",
+      description: "Seu plano foi ativado com sucesso!",
+      variant: "default",
+    })
+    
+    // Redirecionar para o dashboard
+    router.push('/dashboard')
+  }
+
 
 
   if (isLoading) {
@@ -182,13 +197,13 @@ export default function PlansPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-indigo-50">
       {/* Header */}
-      <header className="bg-white border-b border-gray-200">
+      <header className="bg-white/80 backdrop-blur-sm border-b border-gray-200/50 shadow-sm">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-4">
-              <Link href="/dashboard" className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+              <Link href="/dashboard" className="flex items-center gap-2 text-gray-700 hover:text-blue-600 transition-colors">
                 <ArrowLeft className="h-4 w-4" />
                 Voltar
               </Link>
@@ -196,12 +211,12 @@ export default function PlansPage() {
                 <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
                   <span className="text-white font-bold text-lg">IA</span>
                 </div>
-                <span className="text-xl font-bold text-gray-900">iArtigo - Planos</span>
+                <span className="text-xl font-bold text-gray-800">iArtigo - Planos</span>
               </div>
             </div>
             {user && (
               <div className="flex items-center gap-3">
-                <span className="text-sm text-gray-600">Olá, {user.name}</span>
+                <span className="text-sm text-gray-700 font-medium">Olá, {user.name}</span>
               </div>
             )}
           </div>
@@ -209,11 +224,33 @@ export default function PlansPage() {
       </header>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        {/* Aviso para usuários com plano ativo (não cancelado) */}
+        {user?.plan && user?.plan !== 'Por Artigo' && user?.subscriptionStatus !== 'cancelled' && (
+          <Card className="mb-8 border-blue-200 bg-blue-50">
+            <CardContent className="pt-6">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3 text-blue-800">
+                  <CreditCard className="h-5 w-5" />
+                  <div>
+                    <p className="font-medium">Você já possui um plano ativo!</p>
+                    <p className="text-sm">Plano atual: <strong>{user.plan}</strong></p>
+                  </div>
+                </div>
+                <Link href="/plans/manage">
+                  <Button variant="outline" className="border-blue-300 text-blue-700 hover:bg-blue-100">
+                    Gerenciar Plano Atual
+                  </Button>
+                </Link>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold text-gray-900 mb-4">
+          <h1 className="text-5xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent mb-6">
             Escolha o plano ideal para você
           </h1>
-          <p className="text-xl text-gray-600 max-w-3xl mx-auto">
+          <p className="text-xl text-gray-700 max-w-3xl mx-auto leading-relaxed">
             Gere artigos científicos profissionais com inteligência artificial. 
             Todos os planos incluem acesso completo à nossa IA avançada.
           </p>
@@ -224,10 +261,10 @@ export default function PlansPage() {
           {plans.map((plan) => (
             <Card 
               key={plan.id} 
-              className={`relative ${
-                plan.popular ? 'border-blue-500 border-2 shadow-lg scale-105' : ''
+              className={`relative bg-white/90 backdrop-blur-sm border-2 hover:shadow-xl transition-all duration-300 ${
+                plan.popular ? 'border-blue-500 shadow-2xl scale-105' : 'border-gray-200 hover:border-blue-300'
               } ${
-                selectedPlan === plan.id ? 'ring-2 ring-blue-500' : ''
+                selectedPlan === plan.id ? 'ring-4 ring-blue-500/30 shadow-2xl' : ''
               }`}
             >
               {plan.badge && (
@@ -240,17 +277,17 @@ export default function PlansPage() {
               
               <CardHeader className="text-center pb-4">
                 <div className="mb-4">
-                  {plan.id === 'estudante' && <Sparkles className="h-12 w-12 mx-auto text-gray-600" />}
+                  {plan.id === 'estudante' && <Sparkles className="h-12 w-12 mx-auto text-yellow-600" />}
                   {plan.id === 'pesquisador' && <CreditCard className="h-12 w-12 mx-auto text-blue-600" />}
                   {plan.id === 'institucional' && <Building className="h-12 w-12 mx-auto text-green-600" />}
                 </div>
-                <CardTitle className="text-2xl">{plan.name}</CardTitle>
-                <CardDescription className="text-base">{plan.description}</CardDescription>
+                <CardTitle className="text-2xl text-gray-800 font-bold">{plan.name}</CardTitle>
+                <CardDescription className="text-base text-gray-600 leading-relaxed">{plan.description}</CardDescription>
                 <div className="mt-4">
-                  <span className="text-4xl font-bold text-gray-900">R$ {plan.price.toFixed(2)}</span>
-                  <span className="text-gray-600">/mês</span>
+                  <span className="text-4xl font-bold text-gray-800">R$ {plan.price.toFixed(2)}</span>
+                  <span className="text-gray-600 font-medium">/mês</span>
                 </div>
-                <div className="text-sm text-gray-500">
+                <div className="text-sm text-gray-600 font-medium">
                   {plan.articlesLimit ? `${plan.articlesLimit} artigo${plan.articlesLimit > 1 ? 's' : ''} por mês` : 'Artigos ilimitados'}
                 </div>
               </CardHeader>
@@ -258,23 +295,25 @@ export default function PlansPage() {
               <CardContent>
                 <ul className="space-y-3 mb-6">
                   {plan.features.map((feature, index) => (
-                    <li key={index} className="flex items-center gap-2">
+                    <li key={index} className="flex items-center gap-3">
                       <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                      <span className="text-sm text-gray-600">{feature}</span>
+                      <span className="text-sm text-gray-700 font-medium">{feature}</span>
                     </li>
                   ))}
                 </ul>
                 
                 <Button
                   onClick={() => handleSelectPlan(plan.id)}
-                  className={`w-full ${
+                  className={`w-full font-semibold transition-all duration-200 ${
                     plan.popular 
-                      ? 'bg-blue-600 hover:bg-blue-700' 
-                      : 'bg-gray-900 hover:bg-gray-800'
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl' 
+                      : selectedPlan === plan.id 
+                        ? 'bg-blue-600 hover:bg-blue-700 shadow-lg'
+                        : 'bg-white hover:bg-gray-50 border-2 border-gray-300 hover:border-blue-400 text-gray-700 hover:text-blue-700'
                   }`}
                   variant={selectedPlan === plan.id ? "default" : "outline"}
                 >
-                  {selectedPlan === plan.id ? 'Selecionado' : 'Escolher Plano'}
+                  {selectedPlan === plan.id ? '✓ Selecionado' : 'Escolher Plano'}
                 </Button>
               </CardContent>
             </Card>
@@ -283,26 +322,26 @@ export default function PlansPage() {
 
         {/* Resumo do plano selecionado */}
         {selectedPlan && user && (
-          <Card className="max-w-md mx-auto">
-            <CardHeader>
-              <CardTitle>Finalizar Assinatura</CardTitle>
-              <CardDescription>
-                Plano selecionado: {plans.find(p => p.id === selectedPlan)?.name}
+          <Card className="max-w-md mx-auto bg-white/90 backdrop-blur-sm border-2 border-blue-200 shadow-xl">
+            <CardHeader className="text-center">
+              <CardTitle className="text-xl text-gray-800">Finalizar Assinatura</CardTitle>
+              <CardDescription className="text-gray-600">
+                Plano selecionado: <span className="font-semibold text-blue-600">{plans.find(p => p.id === selectedPlan)?.name}</span>
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-gray-600">Plano:</span>
-                  <span className="font-medium">{plans.find(p => p.id === selectedPlan)?.name}</span>
+              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 p-6 rounded-lg border border-blue-200">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm text-gray-700 font-medium">Plano:</span>
+                  <span className="font-semibold text-gray-800">{plans.find(p => p.id === selectedPlan)?.name}</span>
                 </div>
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-sm text-gray-600">Valor mensal:</span>
-                  <span className="font-bold text-lg">R$ {plans.find(p => p.id === selectedPlan)?.price.toFixed(2)}</span>
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm text-gray-700 font-medium">Valor mensal:</span>
+                  <span className="font-bold text-xl text-blue-600">R$ {plans.find(p => p.id === selectedPlan)?.price.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between items-center">
-                  <span className="text-sm text-gray-600">CPF:</span>
-                  <span className="text-sm font-medium">{user.cpf || 'Não informado'}</span>
+                  <span className="text-sm text-gray-700 font-medium">CPF:</span>
+                  <span className="text-sm font-semibold text-gray-800">{user.cpf || 'Não informado'}</span>
                 </div>
               </div>
 
@@ -320,7 +359,7 @@ export default function PlansPage() {
               <Button
                 onClick={handleCreatePayment}
                 disabled={isCreatingPayment || !user.cpf}
-                className="w-full"
+                className="w-full bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800 text-white font-semibold py-3 text-lg shadow-lg hover:shadow-xl transition-all duration-200"
               >
                 {isCreatingPayment ? (
                   <>
@@ -333,12 +372,30 @@ export default function PlansPage() {
               </Button>
 
               <p className="text-xs text-gray-500 text-center">
-                Você será redirecionado para o Asaas para finalizar o pagamento de forma segura.
+                O pagamento será processado pelo Asaas em uma nova janela. Após a confirmação, você será redirecionado para o dashboard.
               </p>
             </CardContent>
           </Card>
         )}
       </div>
+
+      {/* Modal de Pagamento */}
+      {showPaymentModal && paymentData && (
+        <PaymentModal
+          isOpen={showPaymentModal}
+          onClose={() => setShowPaymentModal(false)}
+          checkoutUrl={paymentData.checkoutUrl}
+          paymentId={paymentData.paymentId} // ID local do pagamento
+          asaasId={paymentData.asaasId} // ID do Asaas para verificação
+          planDetails={{
+            name: plans.find(p => p.id === selectedPlan)?.name || '',
+            price: plans.find(p => p.id === selectedPlan)?.price || 0,
+            description: plans.find(p => p.id === selectedPlan)?.description || '',
+            articlesLimit: plans.find(p => p.id === selectedPlan)?.articlesLimit || null,
+          }}
+          onPaymentSuccess={handlePaymentSuccess}
+        />
+      )}
     </div>
   )
 }

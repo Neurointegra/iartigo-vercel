@@ -6,8 +6,6 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/use-toast"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
@@ -15,160 +13,73 @@ import {
   FileText,
   Upload,
   Download,
-  Image as ImageIcon,
-  FileSpreadsheet,
-  Mail,
   Sparkles,
-  Settings,
+  Loader2,
   CheckCircle,
   AlertCircle,
-  Loader2,
+  Clock,
+  ArrowLeft,
 } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
 
-interface FileUpload {
-  file: File
-  type: 'thesis' | 'data' | 'image'
-  name: string
-  size: string
-  content?: string // Conteúdo do arquivo de texto ou URL da imagem
-  imageUrl?: string // URL específica para imagens
-  description?: string // Descrição manual da imagem fornecida pelo usuário
-  needsDescription?: boolean // Indica se a imagem precisa de descrição
+interface ArticleRequest {
+  requestId: number
+  localId: string
+  status: string
+  title: string
+  createdAt: string
 }
 
-export default function GeneratorPage() {
+export default function NewGeneratorPage() {
   const { toast } = useToast()
   const { user } = useAuth()
   const router = useRouter()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const dataInputRef = useRef<HTMLInputElement>(null)
-  const imageInputRef = useRef<HTMLInputElement>(null)
   
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generationProgress, setGenerationProgress] = useState(0)
-  const [generatedContent, setGeneratedContent] = useState("")
-  const [uploadedFiles, setUploadedFiles] = useState<FileUpload[]>([])
-  const [generationStep, setGenerationStep] = useState("")
+  const [currentRequest, setCurrentRequest] = useState<ArticleRequest | null>(null)
+  const [statusMessage, setStatusMessage] = useState("")
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null)
   
   const [formData, setFormData] = useState({
     title: "",
-    articleType: "",
-    centralTheme: "",
-    justification: "",
-    objectives: "",
+    resume: "",
     keywords: "",
-    transformThesis: false,
-    hasCollectedData: false,
-    hasImages: false,
+    introduction: "",
+    articleType: "",
+    justification: "",
+    objective: "",
+    literatureReview: "",
+    methodology: "",
+    discussion: "",
+    conclusion: "",
   })
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([])
 
-  const articleTypes = [
-    "Artigo Científico",
-    "Artigo de Revisão",
-    "Estudo de Caso",
-    "Pesquisa Experimental",
-    "Pesquisa Qualitativa",
-    "Pesquisa Quantitativa",
-    "Meta-análise",
-    "Revisão Sistemática",
-  ]
-
-  const handleInputChange = (field: string, value: string | boolean) => {
+  const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
     }))
   }
 
-  const handleFileUpload = (type: 'thesis' | 'data' | 'image') => {
-    const input = type === 'thesis' ? fileInputRef.current : 
-                  type === 'data' ? dataInputRef.current : 
-                  imageInputRef.current
-    
-    if (input) {
-      input.click()
+  const handleFileUpload = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.click()
     }
   }
 
-  const readFileContent = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        const content = e.target?.result as string
-        resolve(content)
-      }
-      reader.onerror = () => reject(reader.error)
-      reader.readAsText(file)
-    })
-  }
-
-  const uploadImageFile = async (file: File): Promise<string> => {
-    const formData = new FormData()
-    formData.append('file', file)
-
-    const response = await fetch('/api/upload-image', {
-      method: 'POST',
-      body: formData
-    })
-
-    if (!response.ok) {
-      throw new Error('Erro ao fazer upload da imagem')
-    }
-
-    const result = await response.json()
-    return result.url // Retorna a URL pública da imagem
-  }
-
-  const processFileUpload = async (event: React.ChangeEvent<HTMLInputElement>, type: 'thesis' | 'data' | 'image') => {
+  const processFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files
     if (files && files.length > 0) {
-      const file = files[0]
-      
-      let fileContent: string | undefined = undefined
-      
-      // Processar conteúdo baseado no tipo
-      if (type === 'image') {
-        try {
-          fileContent = await uploadImageFile(file)
-          
-        } catch (error) {
-          toast({
-            title: "Erro no upload",
-            description: "Não foi possível fazer upload da imagem. Tente novamente.",
-            variant: "destructive",
-          })
-          return
-        }
-      } else if (type === 'thesis' || type === 'data') {
-        try {
-          // Para arquivos de dados, sempre tentar ler o conteúdo como texto
-          fileContent = await readFileContent(file)
-        } catch (error) {
-          // Erro silencioso, arquivo será enviado sem conteúdo
-        }
-      }
-      
-      const fileUpload: FileUpload = {
-        file,
-        type,
-        name: file.name,
-        size: (file.size / 1024 / 1024).toFixed(2) + ' MB',
-        content: fileContent,
-        imageUrl: type === 'image' ? fileContent : undefined,
-        needsDescription: type === 'image' // Marcar imagens como precisando de descrição
-      }
-      
-      setUploadedFiles(prev => [...prev, fileUpload])
+      const newFiles = Array.from(files)
+      setUploadedFiles(prev => [...prev, ...newFiles])
       
       toast({
-        title: "Arquivo carregado",
-        description: `${file.name} foi carregado com sucesso.${
-          type === 'image' ? ' Por favor, adicione uma descrição da imagem.' :
-          fileContent ? ' Conteúdo processado e pronto para uso.' : ''
-        }`,
+        title: "Arquivos carregados",
+        description: `${newFiles.length} arquivo(s) adicionado(s)`,
         variant: "default",
       })
     }
@@ -178,15 +89,17 @@ export default function GeneratorPage() {
     setUploadedFiles(prev => prev.filter((_, i) => i !== index))
   }
 
-  const updateImageDescription = (index: number, description: string) => {
-    setUploadedFiles(prev => 
-      prev.map((file, i) => 
-        i === index ? { ...file, description, needsDescription: false } : file
-      )
-    )
-  }
-
   const validateForm = () => {
+    // Verificar se já está gerando um artigo
+    if (isGenerating) {
+      toast({
+        title: "Artigo em geração",
+        description: "Aguarde a conclusão do artigo atual para criar um novo.",
+        variant: "destructive",
+      })
+      return false
+    }
+    
     if (!formData.title.trim()) {
       toast({
         title: "Campo obrigatório",
@@ -196,24 +109,28 @@ export default function GeneratorPage() {
       return false
     }
     
-    if (!formData.articleType) {
+    if (!user?.cpf || !user.cpf.trim()) {
       toast({
-        title: "Campo obrigatório",
-        description: "Por favor, selecione o tipo de artigo.",
+        title: "CPF necessário",
+        description: "Por favor, complete seu CPF no perfil para gerar artigos.",
         variant: "destructive",
       })
       return false
     }
 
-    // Verificar se todas as imagens têm descrição
-    const imagesWithoutDescription = uploadedFiles.filter(file => 
-      file.type === 'image' && (!file.description || file.description.trim() === '')
-    )
-    
-    if (imagesWithoutDescription.length > 0) {
+    if (!formData.justification.trim()) {
       toast({
-        title: "Descrições pendentes",
-        description: `Por favor, adicione uma descrição para ${imagesWithoutDescription.length === 1 ? 'a imagem' : `as ${imagesWithoutDescription.length} imagens`} carregada(s).`,
+        title: "Campo obrigatório",
+        description: "Por favor, preencha a justificativa da pesquisa.",
+        variant: "destructive",
+      })
+      return false
+    }
+
+    if (!formData.objective.trim()) {
+      toast({
+        title: "Campo obrigatório",
+        description: "Por favor, preencha o objetivo da pesquisa.",
         variant: "destructive",
       })
       return false
@@ -222,151 +139,224 @@ export default function GeneratorPage() {
     return true
   }
 
-  const simulateProgress = () => {
-    setGenerationProgress(0)
-    const interval = setInterval(() => {
-      setGenerationProgress(prev => {
-        if (prev >= 95) {
-          clearInterval(interval)
-          return 95
+  const startStatusPolling = (requestId: number) => {
+    const interval = setInterval(async () => {
+      try {
+        const response = await fetch(`/api/external-articles/${requestId}`, {
+          method: 'GET',
+        })
+
+        if (response.ok) {
+          // Verificar se é um arquivo (artigo pronto)
+          const contentType = response.headers.get('content-type')
+          if (contentType && !contentType.includes('application/json')) {
+            // É um arquivo - parar polling e fazer download
+            clearInterval(interval)
+            setPollingInterval(null)
+            setIsGenerating(false)
+            setStatusMessage("Artigo concluído! Fazendo download...")
+
+            // Fazer download do arquivo
+            const blob = await response.blob()
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url
+            
+            // Usar o título limpo para o nome do arquivo
+            const cleanTitle = cleanFileName(formData.title)
+            a.download = `${cleanTitle}.docx`
+            document.body.appendChild(a)
+            a.click()
+            document.body.removeChild(a)
+            URL.revokeObjectURL(url)
+
+            toast({
+              title: "Artigo pronto!",
+              description: "O download foi iniciado automaticamente.",
+              variant: "default",
+            })
+
+            // Limpar estado após sucesso e redirecionar para o dashboard
+            setTimeout(() => {
+              setCurrentRequest(null)
+              setStatusMessage("")
+              
+              // Redirecionar para o dashboard após 3 segundos
+              toast({
+                title: "Redirecionando...",
+                description: "Você será redirecionado para o dashboard em alguns segundos.",
+                variant: "default",
+              })
+              
+              setTimeout(() => {
+                router.push('/dashboard')
+              }, 2000)
+            }, 3000)
+
+            return
+          }
+
+          // É uma resposta JSON de status
+          const data = await response.json()
+          if (data.success && data.data.status) {
+            setStatusMessage(data.data.status)
+            
+            // Se erro, parar polling
+            if (data.data.status === 'Erro') {
+              clearInterval(interval)
+              setPollingInterval(null)
+              setIsGenerating(false)
+              
+              toast({
+                title: "Erro na geração",
+                description: "Ocorreu um erro durante a geração do artigo.",
+                variant: "destructive",
+              })
+              
+              // Redirecionar para o dashboard após 3 segundos em caso de erro
+              setTimeout(() => {
+                router.push('/dashboard')
+              }, 3000)
+            }
+          }
         }
-        return prev + Math.random() * 15
-      })
-    }, 500)
-    return interval
+      } catch (error) {
+        console.error('Erro ao verificar status:', error)
+      }
+    }, 5000) // Verificar a cada 5 segundos
+
+    setPollingInterval(interval)
   }
 
   const handleGenerateArticle = async () => {
     if (!validateForm()) return
     
+    if (!user) {
+      toast({
+        title: "Login necessário",
+        description: "Faça login para gerar artigos",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsGenerating(true)
-    const progressInterval = simulateProgress()
+    setStatusMessage("Iniciando geração...")
     
     try {
-      // Preparar dados dos arquivos enviados
-      const filesData = uploadedFiles.map(file => ({
-        name: file.name,
-        type: file.type,
-        size: file.size,
-        fileName: file.file.name,
-        content: file.type === 'image' ? file.imageUrl : file.content, // Para imagens, usar a URL
-        imageUrl: file.imageUrl, // Incluir URL específica para imagens
-        description: file.description // Incluir descrição visual das imagens
-      }))
+      // Preparar FormData
+      const formDataToSend = new FormData()
+      
+      // Campos obrigatórios
+      formDataToSend.append('userId', user.id)
+      formDataToSend.append('authorSSN', user.cpf || '')
+      formDataToSend.append('title', formData.title)
+      formDataToSend.append('justification', formData.justification)
+      formDataToSend.append('objective', formData.objective)
+      
+      // Campos opcionais
+      if (formData.resume) formDataToSend.append('resume', formData.resume)
+      if (formData.keywords) formDataToSend.append('keywords', formData.keywords)
+      if (formData.introduction) formDataToSend.append('introduction', formData.introduction)
+      if (formData.articleType) formDataToSend.append('articleType', formData.articleType)
+      if (formData.literatureReview) formDataToSend.append('literatureReview', formData.literatureReview)
+      if (formData.methodology) formDataToSend.append('methodology', formData.methodology)
+      if (formData.discussion) formDataToSend.append('discussion', formData.discussion)
+      if (formData.conclusion) formDataToSend.append('conclusion', formData.conclusion)
+      
+      // Arquivos
+      uploadedFiles.forEach((file) => {
+        formDataToSend.append('files', file)
+      })
 
-      // Preparar dados para envio
-      const articleData = {
-        title: formData.title,
-        abstract: formData.centralTheme?.trim() || '',
-        articleType: formData.articleType,
-        keywords: formData.keywords,
-        fieldOfStudy: "Geral",
-        methodology: formData.justification,
-        researchObjectives: formData.objectives,
-        includeTables: formData.hasCollectedData,
-        authors: user ? [{
-          id: user.id,
-          name: user.name || "",
-          institution: user.institution || "",
-          email: user.email || "",
-          department: user.department || "",
-          city: user.city || "",
-          country: user.country || "Brasil",
-        }] : [],
-        literatureSuggestions: [],
-        attachedFiles: filesData,
-      }
-
-      // Chamar API de geração
-      const response = await fetch('/api/generate-article', {
+      // Chamar API
+      const response = await fetch('/api/external-articles/create', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(articleData),
+        body: formDataToSend,
       })
 
       if (!response.ok) {
-        throw new Error('Erro na geração do artigo')
+        const errorData = await response.json()
+        throw new Error(errorData.error || 'Erro na geração do artigo')
       }
 
       const result = await response.json()
       
-      clearInterval(progressInterval)
-      setGenerationProgress(100)
-      setGeneratedContent(result.content)
-
-      // Processar conteúdo adicional
-      let additionalContent = result.content;
-
-      // Criar artigo no banco de dados
-      if (!user?.id) {
-        toast({
-          title: "Erro de autenticação",
-          description: "Usuário não autenticado. Faça login para salvar artigos.",
-          variant: "destructive",
+      if (result.success) {
+        setCurrentRequest({
+          requestId: result.data.requestId,
+          localId: result.data.localId,
+          status: result.data.status,
+          title: result.data.title,
+          createdAt: result.data.createdAt,
         })
-        return;
-      }
 
-      const articleResponse = await fetch('/api/articles', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          title: formData.title,
-          content: additionalContent,
-          keywords: formData.keywords,
-          status: 'draft',
-          citationStyle: 'ABNT',
-          targetJournal: '',
-          fieldOfStudy: 'Geral',
-          userId: user?.id
-        }),
-      })
-
-      if (articleResponse.ok) {
-        const newArticle = await articleResponse.json()
+        setStatusMessage("Artigo enviado para geração...")
         
+        // Iniciar polling para verificar status
+        startStatusPolling(result.data.requestId)
+
         toast({
-          title: "Artigo criado com sucesso!",
-          description: `Artigo gerado com formatação HTML/CSS${formData.hasImages ? ' e referências de imagens' : ''}. Redirecionando para o editor...`,
+          title: "Artigo enviado para geração!",
+          description: "Acompanhe o progresso abaixo. O processo pode levar alguns minutos.",
           variant: "default",
         })
-
-        // Redirecionar para o editor do artigo após 2 segundos
-        setTimeout(() => {
-          router.push(`/article/${newArticle.id}`)
-        }, 2000)
       } else {
-        const errorData = await articleResponse.text()
-        console.error('Erro ao salvar artigo:', {
-          status: articleResponse.status,
-          statusText: articleResponse.statusText,
-          error: errorData
-        });
-        
-        toast({
-          title: "Artigo gerado, mas não salvo",
-          description: `O conteúdo foi gerado, mas não foi possível salvar no banco. Erro: ${articleResponse.status}`,
-          variant: "destructive",
-        })
+        throw new Error('Resposta inesperada da API')
       }
 
     } catch (error) {
       console.error('Erro ao gerar artigo:', error)
-      clearInterval(progressInterval)
-      setGenerationProgress(0)
+      setIsGenerating(false)
+      setStatusMessage("")
       
       toast({
         title: "Erro na geração",
-        description: "Ocorreu um erro ao gerar o artigo. Tente novamente.",
+        description: error instanceof Error ? error.message : 'Erro desconhecido',
         variant: "destructive",
       })
-    } finally {
-      setIsGenerating(false)
-      setGenerationStep("")
+      
+      // Redirecionar para o dashboard após 3 segundos em caso de erro
+      setTimeout(() => {
+        router.push('/dashboard')
+      }, 3000)
+    }
+  }
+
+  const handleCancelGeneration = () => {
+    if (pollingInterval) {
+      clearInterval(pollingInterval)
+      setPollingInterval(null)
+    }
+    setIsGenerating(false)
+    setCurrentRequest(null)
+    setStatusMessage("")
+    
+    toast({
+      title: "Geração cancelada",
+      description: "O monitoramento foi interrompido.",
+      variant: "default",
+    })
+  }
+
+  // Função para limpar título para uso como nome de arquivo
+  const cleanFileName = (title: string) => {
+    return title
+      .replace(/[^\w\s-]/g, '') // Remove caracteres especiais exceto hífen
+      .replace(/\s+/g, '_') // Substitui espaços por underscore
+      .replace(/_+/g, '_') // Remove underscores duplicados
+      .trim()
+  }
+
+  const getStatusIcon = () => {
+    if (!statusMessage) return null
+    
+    if (statusMessage.includes('Erro')) {
+      return <AlertCircle className="h-5 w-5 text-red-500" />
+    } else if (statusMessage.includes('concluído')) {
+      return <CheckCircle className="h-5 w-5 text-green-500" />
+    } else {
+      return <Clock className="h-5 w-5 text-blue-500" />
     }
   }
 
@@ -376,357 +366,338 @@ export default function GeneratorPage() {
       <header className="bg-white border-b border-gray-200">
         <div className="px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
-            <Link href="/dashboard" className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
-                <span className="text-white font-bold text-lg">IA</span>
-              </div>
-              <span className="text-xl font-bold text-gray-900">iArtigo</span>
-            </Link>
             <div className="flex items-center gap-4">
-              <Badge variant="secondary">Gerador de Artigos</Badge>
+              <Link href="/dashboard" className="flex items-center gap-2 text-gray-600 hover:text-gray-900">
+                <ArrowLeft className="h-4 w-4" />
+                Voltar
+              </Link>
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-xl flex items-center justify-center shadow-lg">
+                  <span className="text-white font-bold text-lg">IA</span>
+                </div>
+                <span className="text-xl font-bold text-gray-900">iArtigo - Gerador Avançado</span>
+              </div>
             </div>
+            <Badge variant="secondary">Nova API</Badge>
           </div>
         </div>
       </header>
 
       <div className="max-w-4xl mx-auto p-6">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">Gerador de Artigos iArtigo</h1>
-          <p className="text-gray-600">Crie artigos científicos profissionais com inteligência artificial</p>
+          <h1 className="text-3xl font-bold text-gray-900 mb-2">Gerador de Artigos Avançado</h1>
+          <p className="text-gray-600">Crie artigos científicos profissionais com nossa nova API de inteligência artificial</p>
         </div>
 
-        <div className="max-w-4xl mx-auto">
-          {/* Formulário Principal */}
-          <div className="space-y-6">
-            {/* Informações Básicas */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="h-5 w-5" />
-                  Informações do Artigo
-                </CardTitle>
-                <CardDescription>
-                  Preencha as informações básicas do seu artigo científico
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <Label htmlFor="title">Título do Artigo *</Label>
-                  <Input
-                    id="title"
-                    placeholder="Ex: Impacto da IA na Educação"
-                    value={formData.title}
-                    onChange={(e) => handleInputChange('title', e.target.value)}
-                  />
-                </div>
+        {/* Status da geração */}
 
-                <div>
-                  <Label htmlFor="articleType">Tipo de Artigo *</Label>
-                  <Select value={formData.articleType} onValueChange={(value) => handleInputChange('articleType', value)}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Selecione o tipo de artigo" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {articleTypes.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
 
-                <div>
-                  <Label htmlFor="centralTheme">
-                    Resumo Personalizado (Opcional)
-                    <span className="text-sm text-gray-500 font-normal ml-2">
-                      💡 Deixe vazio para gerar automaticamente com base no conteúdo final
-                    </span>
-                  </Label>
-                  <Textarea
-                    id="centralTheme"
-                    placeholder="Deixe em branco para gerar automaticamente baseado no conteúdo do artigo, ou insira um resumo personalizado..."
-                    value={formData.centralTheme}
-                    onChange={(e) => handleInputChange('centralTheme', e.target.value)}
-                    rows={3}
-                    required={false}
-                  />
+        <div className={`space-y-6 ${isGenerating ? 'cursor-not-allowed' : ''}`}>
+          {/* Aviso quando estiver gerando */}
+          {isGenerating && (
+            <Card className="border-orange-200 bg-orange-50">
+              <CardContent className="pt-6">
+                <div className="flex items-center gap-3 text-orange-800">
+                  <Loader2 className="h-5 w-5 animate-spin" />
+                  <div>
+                    <p className="font-medium">Artigo em geração</p>
+                    <p className="text-sm">Aguarde a conclusão do artigo atual para criar um novo</p>
+                  </div>
                 </div>
+              </CardContent>
+            </Card>
+          )}
 
-                <div>
-                  <Label htmlFor="justification">Justificativa da Pesquisa</Label>
-                  <Textarea
-                    id="justification"
-                    placeholder="Ex: A crescente adoção de tecnologias de IA na educação exige uma análise aprofundada de seus benefícios e desafios para otimizar a experiência de aprendizado."
-                    value={formData.justification}
-                    onChange={(e) => handleInputChange('justification', e.target.value)}
-                    rows={3}
-                  />
-                </div>
+          {/* Informações Básicas */}
+          <Card className={isGenerating ? "opacity-60" : ""}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="h-5 w-5" />
+                Informações do Artigo
+              </CardTitle>
+              <CardDescription>
+                {isGenerating 
+                  ? "Formulário bloqueado durante a geração" 
+                  : "Preencha as informações básicas do seu artigo científico"
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="title">Título do Artigo *</Label>
+                <Input
+                  id="title"
+                  placeholder="Ex: Impacto da IA na Educação"
+                  value={formData.title}
+                  onChange={(e) => handleInputChange('title', e.target.value)}
+                  disabled={isGenerating}
+                />
+              </div>
 
-                <div>
-                  <Label htmlFor="objectives">Objetivos da Pesquisa</Label>
-                  <Textarea
-                    id="objectives"
-                    placeholder="Ex: Objetivo geral: Analisar o impacto da IA na personalização. Objetivos específicos: 1. Identificar ferramentas de IA; 2. Avaliar a eficácia; 3. Propor diretrizes."
-                    value={formData.objectives}
-                    onChange={(e) => handleInputChange('objectives', e.target.value)}
-                    rows={3}
-                  />
-                </div>
+              <div>
+                <Label htmlFor="justification">Justificativa da Pesquisa *</Label>
+                <Textarea
+                  id="justification"
+                  placeholder="Justifique a importância e relevância da sua pesquisa..."
+                  value={formData.justification}
+                  onChange={(e) => handleInputChange('justification', e.target.value)}
+                  rows={3}
+                  disabled={isGenerating}
+                />
+              </div>
 
+              <div>
+                <Label htmlFor="objective">Objetivo da Pesquisa *</Label>
+                <Textarea
+                  id="objective"
+                  placeholder="Descreva o objetivo principal da sua pesquisa..."
+                  value={formData.objective}
+                  onChange={(e) => handleInputChange('objective', e.target.value)}
+                  rows={3}
+                  disabled={isGenerating}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <Label htmlFor="keywords">Palavras-chave (separadas por vírgula)</Label>
+                  <Label htmlFor="keywords">Palavras-chave</Label>
                   <Input
                     id="keywords"
-                    placeholder="Ex: Inteligência Artificial, Educação, Personalização, Aprendizado"
+                    placeholder="Ex: IA, Educação, Tecnologia"
                     value={formData.keywords}
                     onChange={(e) => handleInputChange('keywords', e.target.value)}
+                    disabled={isGenerating}
                   />
                 </div>
-              </CardContent>
-            </Card>
 
-            {/* Dados e Mídia */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Upload className="h-5 w-5" />
-                  Dados e Mídia
-                </CardTitle>
-                <CardDescription>
-                  Adicione arquivos e configure opções de conteúdo
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {/* Checkbox para dados coletados */}
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="hasCollectedData"
-                    checked={formData.hasCollectedData}
-                    onCheckedChange={(checked) => handleInputChange('hasCollectedData', checked as boolean)}
+                <div>
+                  <Label htmlFor="articleType">Tipo de Artigo</Label>
+                  <Input
+                    id="articleType"
+                    placeholder="Ex: Artigo Científico, Revisão"
+                    value={formData.articleType}
+                    onChange={(e) => handleInputChange('articleType', e.target.value)}
+                    disabled={isGenerating}
                   />
-                  <Label htmlFor="hasCollectedData">Tenho dados coletados para inserir na pesquisa.</Label>
                 </div>
+              </div>
+            </CardContent>
+          </Card>
 
-                {/* Upload de dados */}
-                {formData.hasCollectedData && (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                    <div className="text-center">
-                      <FileSpreadsheet className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="mt-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => handleFileUpload('data')}
-                        >
-                          Anexar Dados Coletados (CSV, Excel, TXT)
-                        </Button>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Dados serão processados para análise
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Checkbox para figuras/imagens */}
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="hasImages"
-                    checked={formData.hasImages}
-                    onCheckedChange={(checked) => handleInputChange('hasImages', checked as boolean)}
-                  />
-                  <Label htmlFor="hasImages">Tenho figuras/imagens para anexar.</Label>
-                </div>
-
-                {/* Upload de imagens */}
-                {formData.hasImages && (
-                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-4">
-                    <div className="text-center">
-                      <ImageIcon className="mx-auto h-12 w-12 text-gray-400" />
-                      <div className="mt-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => handleFileUpload('image')}
-                        >
-                          Anexar Figura
-                        </Button>
-                      </div>
-                      <p className="text-sm text-gray-500 mt-1">
-                        Imagens serão incluídas no artigo
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Lista de arquivos carregados */}
-                {uploadedFiles.length > 0 && (
-                  <div className="space-y-2">
-                    <Label>Arquivos Carregados:</Label>
-                    {uploadedFiles.map((file, index) => (
-                      <div key={index} className={`p-4 bg-gray-50 rounded-lg border ${
-                        file.type === 'image' ? 'border-l-4 border-blue-500' : 'border-gray-200'
-                      }`}>
-                        {file.type === 'image' && file.imageUrl ? (
-                          <div className="space-y-3">
-                            <div className="flex items-start gap-3">
-                              <img 
-                                src={file.imageUrl} 
-                                alt={file.name}
-                                className="w-16 h-16 object-cover rounded border"
-                              />
-                              <div className="flex-1">
-                                <div className="flex items-center justify-between mb-2">
-                                  <span className="text-sm font-medium">{file.name}</span>
-                                  <Badge variant="outline" className="text-xs">{file.size}</Badge>
-                                </div>
-                                <span className="text-xs text-gray-500 block mb-2">URL: {file.imageUrl}</span>
-                                
-                                {/* Campo para descrição da imagem */}
-                                <div className="space-y-2">
-                                  <Label className="text-xs font-medium text-gray-700">
-                                    Descreva esta imagem: *
-                                  </Label>
-                                  <textarea
-                                    placeholder="Ex: Gráfico de barras mostrando resultados do experimento..."
-                                    value={file.description || ''}
-                                    onChange={(e) => updateImageDescription(index, e.target.value)}
-                                    className={`w-full p-2 text-sm border rounded resize-none h-20 ${
-                                      file.needsDescription && !file.description 
-                                        ? 'border-red-300 bg-red-50' 
-                                        : 'border-gray-300'
-                                    }`}
-                                  />
-                                  {file.needsDescription && !file.description && (
-                                    <span className="text-xs text-red-600">
-                                      ⚠️ Descrição obrigatória para gerar o artigo
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3 flex-1">
-                              <div className="flex items-center gap-2">
-                                {file.type === 'data' ? (
-                                  <FileSpreadsheet className="h-4 w-4 text-green-500" />
-                                ) : (
-                                  <FileText className="h-4 w-4 text-gray-500" />
-                                )}
-                                <span className="text-sm">{file.name}</span>
-                              </div>
-                              <Badge variant="outline" className="text-xs">{file.size}</Badge>
-                              {file.content && (
-                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
-                                  ✓ Conteúdo processado
-                                </Badge>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Botão remover */}
-                        <div className="flex justify-end mt-2">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => removeFile(index)}
-                            className="text-red-600 hover:text-red-800 hover:bg-red-50"
-                          >
-                            Remover
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Botão de Geração */}
-            <Card>
-              <CardContent className="pt-6">
-                <Button
-                  onClick={handleGenerateArticle}
+          {/* Seções Opcionais */}
+          <Card className={isGenerating ? "opacity-60" : ""}>
+            <CardHeader>
+              <CardTitle>Seções Opcionais</CardTitle>
+              <CardDescription>
+                {isGenerating 
+                  ? "Formulário bloqueado durante a geração" 
+                  : "Preencha as seções que você já tem ou deixe em branco para a IA gerar"
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div>
+                <Label htmlFor="resume">Resumo</Label>
+                <Textarea
+                  id="resume"
+                  placeholder="Resumo do artigo (opcional)"
+                  value={formData.resume}
+                  onChange={(e) => handleInputChange('resume', e.target.value)}
+                  rows={3}
                   disabled={isGenerating}
-                  className="w-full h-12 text-lg"
-                  size="lg"
-                >
-                  {isGenerating ? (
-                    <>
-                      <Loader2 className="mr-2 h-5 w-5 animate-spin" />
-                      Gerando Artigo...
-                    </>
-                  ) : (
-                    <>
-                      <Sparkles className="mr-2 h-5 w-5" />
-                      Gerar Artigo Completo
-                    </>
-                  )}
-                </Button>
+                />
+              </div>
 
-                {isGenerating && (
+              <div>
+                <Label htmlFor="introduction">Introdução</Label>
+                <Textarea
+                  id="introduction"
+                  placeholder="Introdução do artigo (opcional)"
+                  value={formData.introduction}
+                  onChange={(e) => handleInputChange('introduction', e.target.value)}
+                  rows={3}
+                  disabled={isGenerating}
+                />
+              </div>
+
+              <div>
+                <Label htmlFor="methodology">Metodologia</Label>
+                <Textarea
+                  id="methodology"
+                  placeholder="Metodologia utilizada (opcional)"
+                  value={formData.methodology}
+                  onChange={(e) => handleInputChange('methodology', e.target.value)}
+                  rows={3}
+                  disabled={isGenerating}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="discussion">Discussão</Label>
+                  <Textarea
+                    id="discussion"
+                    placeholder="Discussão dos resultados (opcional)"
+                    value={formData.discussion}
+                    onChange={(e) => handleInputChange('discussion', e.target.value)}
+                    rows={3}
+                    disabled={isGenerating}
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="conclusion">Conclusão</Label>
+                  <Textarea
+                    id="conclusion"
+                    placeholder="Conclusão do artigo (opcional)"
+                    value={formData.conclusion}
+                    onChange={(e) => handleInputChange('conclusion', e.target.value)}
+                    rows={3}
+                    disabled={isGenerating}
+                  />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Upload de Arquivos */}
+          <Card className={isGenerating ? "opacity-60" : ""}>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Upload className="h-5 w-5" />
+                Arquivos de Dados
+              </CardTitle>
+              <CardDescription>
+                {isGenerating 
+                  ? "Formulário bloqueado durante a geração" 
+                  : "Adicione arquivos CSV, TXT ou XLS para análise de dados pela IA (opcional)"
+                }
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6">
+                <div className="text-center">
+                  <Upload className="mx-auto h-12 w-12 text-gray-400" />
                   <div className="mt-4">
-                    <div className="flex justify-between text-sm text-gray-600 mb-2">
-                      <span>Progresso</span>
-                      <span>{Math.round(generationProgress)}%</span>
-                    </div>
-                    <Progress value={generationProgress} className="w-full" />
-                    {generationStep && (
-                      <div className="mt-2 text-sm text-blue-600 font-medium">
-                        {generationStep}
-                      </div>
-                    )}
+                    <Button
+                      variant="outline"
+                      onClick={handleFileUpload}
+                      disabled={isGenerating}
+                    >
+                      Selecionar Arquivos
+                    </Button>
                   </div>
-                )}
-              </CardContent>
-            </Card>
+                  <p className="text-sm text-gray-500 mt-2">
+                    Formatos aceitos: CSV, TXT, XLS
+                  </p>
+                </div>
+              </div>
 
-            {/* Artigo Gerado */}
-            {generatedContent && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-lg">Artigo Gerado</CardTitle>
-                  <CardDescription>
-                    Seu artigo foi criado com sucesso! Redirecionando para o editor...
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="bg-gray-50 p-4 rounded-lg max-h-96 overflow-y-auto">
-                    <pre className="whitespace-pre-wrap text-sm">{generatedContent}</pre>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+              {/* Lista de arquivos carregados */}
+              {uploadedFiles.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  <Label>Arquivos Carregados:</Label>
+                  {uploadedFiles.map((file, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-2">
+                        <FileText className="h-4 w-4 text-gray-500" />
+                        <span className="text-sm">{file.name}</span>
+                        <Badge variant="outline" className="text-xs">
+                          {(file.size / 1024).toFixed(1)} KB
+                        </Badge>
+                      </div>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeFile(index)}
+                        className="text-red-600 hover:text-red-800 hover:bg-red-50"
+                        disabled={isGenerating}
+                      >
+                        Remover
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Botão de Geração */}
+          <Card className={isGenerating ? "opacity-60" : ""}>
+            <CardContent className="pt-6">
+              <Button
+                onClick={handleGenerateArticle}
+                disabled={isGenerating}
+                className="w-full h-12 text-lg"
+                size="lg"
+              >
+                {isGenerating ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                    Gerando Artigo...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="mr-2 h-5 w-5" />
+                    Gerar artigo
+                  </>
+                )}
+              </Button>
+              
+              {isGenerating && (
+                <p className="text-sm text-gray-500 text-center mt-3">
+                  ⚠️ Aguarde a conclusão do artigo atual para criar um novo
+                </p>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Inputs ocultos para upload */}
+        {/* Status da Geração - Movido para baixo */}
+        {isGenerating && currentRequest && (
+          <Card className="mt-6 border-blue-200 bg-blue-50">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin text-blue-600" />
+                Gerando Artigo
+              </CardTitle>
+              <CardDescription>
+                Título: {currentRequest.title}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center gap-2 mb-4">
+                {getStatusIcon()}
+                <span className="text-sm font-medium">{statusMessage || "Processando..."}</span>
+              </div>
+              
+              <div className="flex items-center justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleCancelGeneration}
+                >
+                  Cancelar Monitoramento
+                </Button>
+              </div>
+              
+              <p className="text-xs text-gray-500 mt-2">
+                A geração pode levar alguns minutos. O download será iniciado automaticamente quando concluído.
+              </p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Input oculto para upload */}
         <input
           ref={fileInputRef}
           type="file"
-          accept=".pdf,.docx,.doc"
-          onChange={(e) => processFileUpload(e, 'thesis')}
-          className="hidden"
-        />
-        <input
-          ref={dataInputRef}
-          type="file"
-          accept=".csv,.xlsx,.xls,.txt"
-          onChange={(e) => processFileUpload(e, 'data')}
-          className="hidden"
-        />
-        <input
-          ref={imageInputRef}
-          type="file"
-          accept="image/*"
-          onChange={(e) => processFileUpload(e, 'image')}
+          accept=".csv,.txt,.xls,.xlsx"
+          multiple
+          onChange={processFileUpload}
           className="hidden"
         />
       </div>
     </div>
   )
 }
-

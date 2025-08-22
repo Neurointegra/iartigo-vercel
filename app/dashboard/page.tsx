@@ -31,6 +31,7 @@ import {
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
+import { PlansButton } from "@/components/PlansButton"
 
 interface Author {
   id: string
@@ -70,6 +71,8 @@ export default function DashboardPage() {
 
   // Estados locais - todos devem ser declarados antes de qualquer early return
   const [articleRequests, setArticleRequests] = useState<any[]>([])
+  const [isGeneratingArticle, setIsGeneratingArticle] = useState(false)
+  const [completedArticlesCount, setCompletedArticlesCount] = useState<number>(0)
   const [authors, setAuthors] = useState<Author[]>([
     {
       id: "1",
@@ -130,13 +133,103 @@ export default function DashboardPage() {
     }
   }, [user, authors.length])
 
+  // Função para calcular artigos concluídos com sucesso
+  const calculateCompletedArticles = (requests: any[]) => {
+    const completed = requests.filter((request: any) => 
+      request.status === 'completed' || 
+      request.status === 'success' ||
+      (request.statusMessage && request.statusMessage.toLowerCase().includes('concluído'))
+    ).length
+    
+    setCompletedArticlesCount(completed)
+    return completed
+  }
+
+  // Função para calcular artigos restantes
+  const getRemainingArticles = () => {
+    if (!user?.articlesLimit) return null // Plano ilimitado
+    
+    // Garantir que completedArticlesCount seja um número válido
+    const completed = typeof completedArticlesCount === 'number' ? completedArticlesCount : 0
+    const limit = typeof user.articlesLimit === 'number' ? user.articlesLimit : 0
+    
+    const remaining = Math.max(0, limit - completed)
+    
+    return remaining
+  }
+
+  // Função para verificar se o usuário pode gerar artigos
+  const canGenerateArticles = () => {
+    console.log('🔍 canGenerateArticles - Início:', {
+      userPlan: user?.plan,
+      userArticlesLimit: user?.articlesLimit,
+      subscriptionStatus: user?.subscriptionStatus,
+      completedArticlesCount,
+      userObject: user
+    })
+    
+    if (!user?.plan || user?.plan === 'Por Artigo') {
+      console.log('❌ canGenerateArticles - Bloqueado por:', {
+        noPlan: !user?.plan,
+        isPerArticle: user?.plan === 'Por Artigo'
+      })
+      return false
+    }
+
+    // BLOQUEAR se o pagamento estiver vencido ou atrasado
+    if (user?.subscriptionStatus === 'overdue' || user?.subscriptionStatus === 'expired') {
+      console.log('❌ canGenerateArticles - Bloqueado por pagamento vencido:', user.subscriptionStatus)
+      return false
+    }
+
+    // BLOQUEAR se a assinatura estiver inativa ou pendente por muito tempo
+    if (user?.subscriptionStatus === 'inactive' || user?.subscriptionStatus === 'pending') {
+      console.log('❌ canGenerateArticles - Bloqueado por assinatura inativa:', user.subscriptionStatus)
+      return false
+    }
+    
+    // Se for plano ilimitado, sempre pode gerar (desde que não esteja bloqueado por status)
+    if (!user.articlesLimit) {
+      return true
+    }
+    
+    // Se for plano com limite, verificar se ainda tem artigos disponíveis
+    const remainingArticles = getRemainingArticles()
+    return remainingArticles !== null && remainingArticles > 0
+  }
+
+
+
+  // Função para limpar título para uso como nome de arquivo
+  const cleanFileName = (title: string) => {
+    return title
+      .replace(/[^\w\s-]/g, '') // Remove caracteres especiais exceto hífen
+      .replace(/\s+/g, '_') // Substitui espaços por underscore
+      .replace(/_+/g, '_') // Remove underscores duplicados
+      .trim()
+  }
+
   const loadUserArticles = async () => {
     try {
       // Carregar requests de artigos da IA
       const requestsResponse = await fetch(`/api/external-articles?userId=${user?.id}`)
       if (requestsResponse.ok) {
         const requestsData = await requestsResponse.json()
-        setArticleRequests(requestsData.requests || [])
+        const requests = requestsData.requests || []
+        
+        setArticleRequests(requests)
+        
+        // Calcular artigos concluídos
+        const completed = calculateCompletedArticles(requests)
+        
+        // Verificar se há algum artigo sendo gerado
+        const hasGeneratingArticle = requests.some((request: any) => 
+          request.status === 'processing' || 
+          request.status === 'pending' ||
+          request.status === 'generating' ||
+          (request.statusMessage && request.statusMessage.toLowerCase().includes('gerando'))
+        )
+        setIsGeneratingArticle(hasGeneratingArticle)
       }
     } catch (error) {
       console.error('Error loading articles:', error)
@@ -227,19 +320,22 @@ export default function DashboardPage() {
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a')
         a.href = url
-        a.download = `${title}.pdf`
+        
+        // Usar o título limpo para o nome do arquivo
+        const cleanTitle = cleanFileName(title)
+        a.download = `${cleanTitle}.docx`
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
         URL.revokeObjectURL(url)
-
+        
         toast({
           title: "Download iniciado!",
           description: "O artigo foi baixado com sucesso.",
           variant: "default",
         })
 
-        // Recarregar lista para atualizar status
+        // Recarregar lista para atualizar status e contagem
         loadUserArticles()
         return
       }
@@ -248,18 +344,21 @@ export default function DashboardPage() {
       const data = await response.json()
       if (data.success && !data.isReady) {
         if (data.data.status === 'Erro') {
-          toast({
+      toast({
             title: "Erro na geração",
             description: "Ocorreu um erro durante a geração do artigo.",
-            variant: "destructive",
-          })
+        variant: "destructive",
+      })
         } else {
-          toast({
+        toast({
             title: "Artigo sendo gerado",
             description: `Status: ${data.data.statusMessage || data.data.status}. Tente novamente em alguns minutos.`,
-            variant: "default",
-          })
+          variant: "default",
+        })
         }
+        
+        // Recarregar lista para atualizar status e verificar se ainda está gerando
+        loadUserArticles()
       }
     } catch (error) {
       console.error('Erro ao baixar artigo:', error)
@@ -287,8 +386,8 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-4">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-medium text-gray-900">{user?.name || "Usuário"}</p>
+                <div className="text-right hidden sm:block">
+                  <p className="text-sm font-medium text-gray-900">{user?.name || "Usuário"}</p>
                 <p className="text-xs text-gray-500">{user?.email}</p>
               </div>
               <Button 
@@ -308,14 +407,14 @@ export default function DashboardPage() {
       {/* Main Content */}
       <main className="flex-1">
         <div className="py-6">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            {/* Dashboard Header */}
-            <div className="mb-8">
-              <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-              <p className="mt-1 text-sm text-gray-500">
-                Bem-vindo de volta! Gerencie seus artigos científicos e acompanhe seu progresso.
-              </p>
-            </div>
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              {/* Dashboard Header */}
+              <div className="mb-8">
+                <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
+                <p className="mt-1 text-sm text-gray-500">
+                  Bem-vindo de volta! Gerencie seus artigos científicos e acompanhe seu progresso.
+                </p>
+              </div>
 
             {/* Plan and Usage Information */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
@@ -329,25 +428,23 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {user?.subscriptionStatus === 'active' ? (
+                    {user?.plan && user?.plan !== 'Por Artigo' ? (
                       // Usuário tem plano ativo
                       <>
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-lg">{user?.plan}</span>
-                          <Badge variant="secondary" className="bg-green-100 text-green-800">
-                            Ativo
-                          </Badge>
+                    <Badge variant="secondary" className="bg-green-100 text-green-800">
+                      Ativo
+                    </Badge>
                         </div>
                         {user?.subscriptionExpiresAt && (
                           <p className="text-sm text-gray-600">
                             Válido até: {new Date(user.subscriptionExpiresAt).toLocaleDateString('pt-BR')}
                           </p>
                         )}
-                        <Link href="/plans">
-                          <Button size="sm" variant="outline" className="w-full">
-                            Alterar Plano
-                          </Button>
-                        </Link>
+                        <div className="space-y-2">
+                          <PlansButton size="sm" variant="outline" className="w-full" />
+                        </div>
                       </>
                     ) : (
                       // Usuário não tem plano ativo
@@ -358,11 +455,12 @@ export default function DashboardPage() {
                             Assine um plano para começar a gerar artigos
                           </p>
                         </div>
-                        <Link href="/plans">
-                          <Button size="sm" className="w-full bg-green-600 hover:bg-green-700">
-                            Escolher Plano
-                          </Button>
-                        </Link>
+                        <PlansButton 
+                          size="sm" 
+                          className="w-full bg-green-600 hover:bg-green-700"
+                        >
+                          {user?.plan && user.plan !== 'Por Artigo' && user.subscriptionStatus !== 'cancelled' ? 'Gerenciar Plano' : 'Escolher Plano'}
+                        </PlansButton>
                       </>
                     )}
                   </div>
@@ -379,37 +477,64 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {user?.subscriptionStatus === 'active' ? (
+                    {user?.plan && user?.plan !== 'Por Artigo' ? (
                       // Usuário tem plano ativo
                       user?.articlesLimit ? (
                         // Plano com limite mensal
                         <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-2xl font-bold text-blue-600">
-                              {(user.articlesLimit - user.articlesUsed) || 0}
-                            </span>
-                            <span className="text-sm text-gray-500">restantes</span>
-                          </div>
-                          <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div 
-                              className="bg-blue-600 h-2 rounded-full" 
-                              style={{ 
-                                width: `${user.articlesLimit ? (user.articlesUsed / user.articlesLimit) * 100 : 0}%` 
-                              }}
-                            ></div>
-                          </div>
-                          <p className="text-sm text-gray-600 mt-1">
-                            {user.articlesUsed} de {user.articlesLimit} usados este mês
-                          </p>
+                          {(() => {
+                            const remaining = getRemainingArticles()
+                            const hasRemaining = remaining !== null && remaining > 0
+                            const usagePercentage = user.articlesLimit ? Math.min(100, (completedArticlesCount / user.articlesLimit) * 100) : 0
+                            
+                            return (
+                              <>
+                                <div className="flex items-center justify-between mb-3">
+                                  <span className={`text-3xl font-bold ${
+                                    hasRemaining ? 'text-blue-600' : 'text-red-600'
+                                  }`}>
+                                    {remaining}
+                                  </span>
+                                  <span className="text-sm text-gray-600 font-medium">restantes</span>
+                                </div>
+                                
+                                {/* Barra de progresso */}
+                                <div className="w-full bg-gray-100 rounded-full h-3 mb-3 overflow-hidden">
+                                  <div 
+                                    className={`h-3 rounded-full transition-all duration-300 ${
+                                      hasRemaining ? 'bg-blue-500' : 'bg-red-500'
+                                    }`}
+                                    style={{ 
+                                      width: `${usagePercentage}%` 
+                                    }}
+                                  ></div>
+                                </div>
+                                
+                                {/* Informações de uso */}
+                                <div className="space-y-1">
+                                  <p className={`text-sm ${
+                                    hasRemaining ? 'text-gray-600' : 'text-red-600 font-medium'
+                                  }`}>
+                                    {completedArticlesCount} de {user.articlesLimit} usados este mês
+                                  </p>
+                                  {!hasRemaining && (
+                                    <p className="text-sm text-red-600 font-medium bg-red-50 px-2 py-1 rounded">
+                                      ⚠️ Limite atingido!
+                                    </p>
+                                  )}
+                                </div>
+                              </>
+                            )
+                          })()}
                         </div>
                       ) : (
                         // Plano ilimitado
-                        <div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-2xl font-bold text-purple-600">∞</span>
-                            <span className="text-sm text-gray-500">ilimitado</span>
+                        <div className="text-center py-2">
+                          <div className="flex items-center justify-center mb-3">
+                            <span className="text-4xl font-bold text-purple-600">∞</span>
                           </div>
-                          <p className="text-sm text-gray-600">
+                          <span className="text-sm text-gray-500 font-medium">ilimitado</span>
+                          <p className="text-sm text-gray-600 mt-2">
                             Gere quantos artigos precisar
                           </p>
                         </div>
@@ -417,8 +542,8 @@ export default function DashboardPage() {
                     ) : (
                       // Usuário não tem plano ativo
                       <div className="text-center py-4">
-                        <div className="text-2xl font-bold text-gray-400 mb-2">0</div>
-                        <p className="text-sm text-gray-500">
+                        <div className="text-3xl font-bold text-gray-400 mb-2">0</div>
+                        <p className="text-sm text-gray-500 font-medium">
                           Nenhum artigo disponível
                         </p>
                         <p className="text-xs text-gray-400 mt-1">
@@ -439,23 +564,29 @@ export default function DashboardPage() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Artigos criados</span>
-                      <span className="font-semibold">{user?.articlesUsed || 0}</span>
+                  <div className="space-y-4">
+                    <div className="flex items-center justify-between p-3 bg-blue-50 rounded-lg">
+                      <span className="text-sm text-gray-700 font-medium">Artigos concluídos</span>
+                      <span className="font-bold text-blue-600 text-lg">{completedArticlesCount}</span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Último acesso</span>
-                      <span className="font-semibold text-sm">
+                    <div className="flex items-center justify-between p-3 bg-orange-50 rounded-lg">
+                      <span className="text-sm text-gray-700 font-medium">Em geração</span>
+                      <span className="font-bold text-orange-600 text-lg">
+                        {isGeneratingArticle ? '1' : '0'}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-green-50 rounded-lg">
+                      <span className="text-sm text-gray-700 font-medium">Último acesso</span>
+                      <span className="font-semibold text-sm text-gray-800">
                         {user?.lastLoginAt ? 
                           new Date(user.lastLoginAt).toLocaleDateString('pt-BR') : 
                           'Hoje'
                         }
                       </span>
                     </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-sm text-gray-600">Membro desde</span>
-                      <span className="font-semibold text-sm">
+                    <div className="flex items-center justify-between p-3 bg-purple-50 rounded-lg">
+                      <span className="text-sm text-gray-700 font-medium">Membro desde</span>
+                      <span className="font-semibold text-sm text-gray-800">
                         {user?.createdAt ? 
                           new Date(user.createdAt).toLocaleDateString('pt-BR') : 
                           'Recente'
@@ -468,50 +599,124 @@ export default function DashboardPage() {
             </div>
 
                 {/* Quick Actions */}
-                <div className="space-y-8">
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                        <Sparkles className="h-5 w-5" />
-                        Ações Rápidas
+                  <div className="space-y-8">
+                    {/* Aviso quando há artigo sendo gerado ou limite atingido */}
+                    {(isGeneratingArticle || !canGenerateArticles()) && (
+                      <Card className={`${isGeneratingArticle ? 'border-orange-300 bg-orange-50' : 'border-red-300 bg-red-50'} shadow-sm`}>
+                        <CardContent className="pt-6">
+                          <div className={`flex items-center gap-4 ${isGeneratingArticle ? 'text-orange-800' : 'text-red-800'}`}>
+                            {isGeneratingArticle ? (
+                              <>
+                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-orange-600 flex-shrink-0"></div>
+                                <div className="flex-1">
+                                  <p className="font-semibold text-lg mb-1">Artigo em geração</p>
+                                  <p className="text-sm opacity-90">Aguarde a conclusão do artigo atual para criar um novo</p>
+                                </div>
+                              </>
+                            ) : (
+                              <>
+                                <div className="w-6 h-6 bg-red-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                  <span className="text-white text-xs font-bold">!</span>
+                                </div>
+                                <div className="flex-1">
+                                  <p className="font-semibold text-lg mb-1">Limite de artigos atingido</p>
+                                  <p className="text-sm opacity-90">Você não tem mais artigos disponíveis neste mês</p>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )}
+
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Sparkles className="h-5 w-5" />
+                          Ações Rápidas
                       </CardTitle>
-                      <CardDescription>Crie e edite artigos científicos profissionais</CardDescription>
+                        <CardDescription>
+                          {isGeneratingArticle 
+                            ? "Gerador bloqueado durante a geração de artigo" 
+                            : !canGenerateArticles()
+                              ? "Limite de artigos atingido - Renove seu plano para continuar"
+                              : "Crie e edite artigos científicos profissionais"
+                          }
+                        </CardDescription>
                     </CardHeader>
                     <CardContent>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl">
                         <div className="relative">
-                          <Button 
+                        <Button 
                             className={`h-24 flex-col gap-2 w-full ${
-                              user?.subscriptionStatus === 'active' 
-                                ? "bg-gradient-to-r from-green-600 to-green-700 hover:from-green-700 hover:to-green-800" 
+                              canGenerateArticles() && !isGeneratingArticle
+                                ? "bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800" 
                                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
                             }`}
-                            size="lg"
+                          size="lg"
+                            disabled={!canGenerateArticles() || isGeneratingArticle}
                             onClick={() => {
-                              if (user?.subscriptionStatus === 'active') {
-                                router.push('/new-generator')
+                              if (canGenerateArticles() && !isGeneratingArticle) {
+                                router.push('/generator')
+                              } else if (isGeneratingArticle) {
+                                toast({
+                                  title: "Artigo em geração",
+                                  description: "Aguarde a conclusão do artigo atual para criar um novo.",
+                                  variant: "destructive",
+                                })
+                              } else if (!canGenerateArticles()) {
+                                // Verificar o motivo específico do bloqueio
+                                if (user?.subscriptionStatus === 'overdue' || user?.subscriptionStatus === 'expired') {
+                                  toast({
+                                    title: "Pagamento vencido",
+                                    description: "Sua assinatura está com pagamento vencido. Regularize para continuar usando o gerador.",
+                                    variant: "destructive",
+                                  })
+                                } else if (user?.subscriptionStatus === 'inactive' || user?.subscriptionStatus === 'pending') {
+                                  toast({
+                                    title: "Assinatura inativa",
+                                    description: "Sua assinatura não está ativa. Verifique o status do pagamento.",
+                                    variant: "destructive",
+                                  })
+                                } else {
+                                  toast({
+                                    title: "Limite de artigos atingido",
+                                    description: "Você não tem mais artigos disponíveis neste mês. Renove seu plano ou aguarde o próximo ciclo.",
+                                    variant: "destructive",
+                                  })
+                                }
                               } else {
-                                router.push('/plans')
+                                router.push(user?.plan && user.plan !== 'Por Artigo' && user.subscriptionStatus !== 'cancelled' ? '/plans/manage' : '/plans')
                               }
                             }}
                           >
                             <Sparkles className="h-6 w-6" />
                             <span>IA IArtigo</span>
                             <span className="text-xs opacity-75">
-                              {user?.subscriptionStatus === 'active' ? 'Gerador avançado' : 'Requer plano ativo'}
+                              {isGeneratingArticle 
+                                ? 'Artigo em geração' 
+                                : !canGenerateArticles()
+                                  ? 'Limite atingido'
+                                  : 'Gerador avançado'
+                              }
                             </span>
-                          </Button>
-                          {user?.subscriptionStatus === 'active' ? (
-                            <Badge className="absolute -top-2 -right-2 bg-yellow-500 text-yellow-900 border-yellow-400">
-                              Disponível
-                            </Badge>
-                          ) : (
-                            <Badge className="absolute -top-2 -right-2 bg-red-500 text-red-100 border-red-400">
-                              Bloqueado
+                        </Button>
+                          {(!canGenerateArticles() || isGeneratingArticle) && (
+                            <Badge className={`absolute -top-2 -right-2 ${
+                              isGeneratingArticle 
+                                ? 'bg-orange-500 text-orange-100 border-orange-400' 
+                                : !canGenerateArticles()
+                                  ? 'bg-red-500 text-red-100 border-red-400'
+                                  : 'bg-red-500 text-red-100 border-red-400'
+                            }`}>
+                              {isGeneratingArticle ? 'Gerando' : 
+                               user?.subscriptionStatus === 'overdue' || user?.subscriptionStatus === 'expired' ? 'Vencido' :
+                               user?.subscriptionStatus === 'inactive' || user?.subscriptionStatus === 'pending' ? 'Inativo' :
+                               'Bloqueado'}
                             </Badge>
                           )}
                         </div>
-                        
+
                         <Button 
                           variant="outline" 
                           className="h-24 flex-col gap-2 opacity-50 cursor-not-allowed" 
@@ -549,22 +754,22 @@ export default function DashboardPage() {
                           </div>
                         ) : (
                           articleRequests.map((request) => (
-                            <div 
+                              <div
                               key={request.id} 
                               className="flex items-center justify-between p-4 border rounded-lg hover:bg-gray-50 transition-colors"
-                            >
-                              <div className="flex-1">
+                              >
+                                <div className="flex-1">
                                 <h3 className="font-medium text-gray-900 mb-1">{request.title}</h3>
-                                <div className="flex items-center gap-4 text-sm text-gray-500">
-                                  <span className="flex items-center gap-1">
-                                    <Calendar className="h-4 w-4" />
+                                  <div className="flex items-center gap-4 text-sm text-gray-500">
+                                    <span className="flex items-center gap-1">
+                                      <Calendar className="h-4 w-4" />
                                     {formatDate(request.createdAt)}
-                                  </span>
+                                    </span>
 
                                   <span>Status: {request.statusMessage || request.status}</span>
                                 </div>
                               </div>
-                              <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3">
                                 <Badge className={
                                   request.status === 'completed' ? "bg-green-100 text-green-800" :
                                   request.status === 'error' ? "bg-red-100 text-red-800" :
@@ -576,9 +781,9 @@ export default function DashboardPage() {
                                    request.status === 'processing' ? 'Gerando' :
                                    'Pendente'}
                                 </Badge>
-                                <Button 
-                                  variant="outline" 
-                                  size="sm"
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
                                   onClick={() => handleDownloadArticle(request.id, request.title)}
                                   className="flex items-center gap-1"
                                 >
@@ -588,7 +793,7 @@ export default function DashboardPage() {
                                     <RefreshCw className="h-4 w-4" />
                                   )}
                                   {request.status === 'completed' ? 'Download' : 'Verificar'}
-                                </Button>
+                        </Button>
                               </div>
                             </div>
                           ))
@@ -596,10 +801,10 @@ export default function DashboardPage() {
                       </div>
                     </CardContent>
                   </Card>
-                </div>
               </div>
             </div>
-          </main>
-        </div>
+          </div>
+        </main>
+    </div>
   )
 }

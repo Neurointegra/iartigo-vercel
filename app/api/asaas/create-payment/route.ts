@@ -128,6 +128,7 @@ export async function POST(request: NextRequest) {
     const paymentLink = await AsaasService.generatePaymentLink(paymentData)
     console.log('✅ Link de pagamento gerado:', paymentLink.paymentUrl)
     console.log('🔍 Resposta completa do pagamento:', JSON.stringify(paymentLink, null, 2))
+    console.log('🔍 ID do pagamento Asaas:', paymentLink.id)
 
     // Criar registro de pagamento no banco local
     const payment = await PaymentService.create({
@@ -136,7 +137,7 @@ export async function POST(request: NextRequest) {
       planType,
       creditsAmount: planConfig.creditsAmount,
       userId,
-      asaasId: asaasSubscription.id,
+      asaasId: paymentLink.id, // ID do pagamento (não da assinatura)
       asaasCustomerId: asaasCustomer.id,
       asaasSubscriptionId: asaasSubscription.id, // ID da assinatura
       description: planConfig.description,
@@ -149,6 +150,7 @@ export async function POST(request: NextRequest) {
       success: true,
       data: {
         paymentId: payment.id,
+        asaasId: paymentLink.id, // ID do Asaas para verificação
         asaasSubscriptionId: asaasSubscription.id,
         checkoutUrl: paymentLink.paymentUrl || '',
         dueDate: dueDate.toISOString(),

@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -20,10 +21,33 @@ import {
   Target,
 } from "lucide-react"
 import Link from "next/link"
+import { useAuth } from "@/lib/auth-context"
 
 export default function LandingPage() {
+  const router = useRouter()
+  const { user, isLoading, isAuthenticated } = useAuth()
   const [language, setLanguage] = useState<"pt" | "en">("pt")
   const [activeFeature, setActiveFeature] = useState(0)
+
+  // Redirecionar para dashboard se usuário estiver logado
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && user) {
+      console.log('🔄 Usuário logado detectado, redirecionando para dashboard...')
+      router.push('/dashboard')
+    }
+  }, [isLoading, isAuthenticated, user, router])
+
+  // Mostrar loading enquanto verifica autenticação
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-lg text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    )
+  }
 
   const content = {
     pt: {

@@ -19,6 +19,10 @@ export type CreateUserData = {
 
 export type UpdateUserData = Partial<CreateUserData> & {
   lastLoginAt?: Date
+  subscriptionId?: string
+  subscriptionStatus?: string
+  subscriptionExpiresAt?: Date
+  subscriptionPaidAt?: Date
 }
 
 export class UserService {

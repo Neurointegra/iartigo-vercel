@@ -84,6 +84,11 @@ export class AsaasService {
     }
   }
 
+  // Criar cliente (alias para createOrUpdateCustomer)
+  static async createCustomer(customerData: AsaasCustomer): Promise<any> {
+    return await this.createOrUpdateCustomer(customerData)
+  }
+
   // Criar cobrança única
   static async createPayment(paymentData: AsaasPayment): Promise<any> {
     return await this.makeRequest('/payments', 'POST', paymentData)
@@ -98,16 +103,21 @@ export class AsaasService {
   static async generatePaymentLink(paymentData: AsaasPayment): Promise<any> {
     const payment = await this.makeRequest('/payments', 'POST', paymentData)
     
-    // Gerar link de pagamento
-    const paymentLink = await this.makeRequest(`/payments/${payment.id}/paymentLink`, 'POST', {
-      expiresDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0], // 7 dias
-      allowInstallments: false,
-      maxInstallments: 1,
+    // O pagamento criado já deve ter uma URL de checkout
+    // Vamos verificar todos os campos possíveis
+    const paymentUrl = payment.invoiceUrl || payment.url || payment.checkoutUrl || payment.paymentUrl || ''
+    
+    console.log('🔍 Campos do pagamento para URL:', {
+      invoiceUrl: payment.invoiceUrl,
+      url: payment.url,
+      checkoutUrl: payment.checkoutUrl,
+      paymentUrl: payment.paymentUrl,
+      finalUrl: paymentUrl
     })
     
     return {
       ...payment,
-      paymentUrl: paymentLink.url,
+      paymentUrl: paymentUrl,
     }
   }
 
@@ -138,10 +148,7 @@ export class AsaasService {
 
   // Webhook: validar assinatura
   static validateWebhookSignature(payload: string, signature: string): boolean {
-    console.log('🔍 Validando assinatura do webhook:', signature)
-    console.log('🔍 Payload recebido:', payload)
-    console.log('🔍 Token de webhook:', process.env.ASAAS_WEBHOOK_TOKEN)
-    return true
+    return process.env.ASAAS_WEBHOOK_TOKEN == signature
   }
 
   // Processar evento de webhook

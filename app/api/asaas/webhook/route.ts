@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { AsaasService } from '@/lib/services/asaas.service'
 import { PaymentService } from '@/lib/services/payment.service'
 import { UserService } from '@/lib/services/user.service'
+import { prisma } from '@/lib/database'
 
 export async function POST(request: NextRequest) {
   try {
@@ -67,7 +68,7 @@ async function processAsaasEvent(eventType: string, eventData: any) {
       return await handleSubscriptionCancelled(eventData)
     default:
       console.log(`⚠️ Evento Asaas não tratado: ${eventType}`)
-      return { status: 'ignored', event: eventType }
+      return { status: 'success' }
   }
 }
 
@@ -77,8 +78,7 @@ async function handlePaymentReceived(eventData: any) {
     console.log('💰 Pagamento recebido:', payment.id)
 
     // Buscar pagamento no banco local
-    const localPayment = await PaymentService.getByAsaasId ? 
-      await PaymentService.getByAsaasId(payment.id) : null
+    const localPayment = await PaymentService.getByAsaasId(payment.id)
 
     if (!localPayment) {
       console.warn('⚠️ Pagamento não encontrado no banco local:', payment.id)
@@ -121,8 +121,7 @@ async function handlePaymentOverdue(eventData: any) {
     console.log('⏰ Pagamento em atraso:', payment.id)
 
     // Buscar pagamento no banco local
-    const localPayment = await PaymentService.getByAsaasId ? 
-      await PaymentService.getByAsaasId(payment.id) : null
+    const localPayment = await PaymentService.getByAsaasId(payment.id)
 
     if (localPayment) {
       // Atualizar status do pagamento
@@ -151,8 +150,7 @@ async function handlePaymentDeleted(eventData: any) {
     console.log('🗑️ Pagamento cancelado:', payment.id)
 
     // Buscar pagamento no banco local
-    const localPayment = await PaymentService.getByAsaasId ? 
-      await PaymentService.getByAsaasId(payment.id) : null
+    const localPayment = await PaymentService.getByAsaasId(payment.id)
 
     if (localPayment) {
       // Atualizar status do pagamento
@@ -181,8 +179,7 @@ async function handlePaymentRestored(eventData: any) {
     console.log('🔄 Pagamento restaurado:', payment.id)
 
     // Buscar pagamento no banco local
-    const localPayment = await PaymentService.getByAsaasId ? 
-      await PaymentService.getByAsaasId(payment.id) : null
+    const localPayment = await PaymentService.getByAsaasId(payment.id)
 
     if (localPayment) {
       // Atualizar status do pagamento
@@ -203,47 +200,62 @@ async function handlePaymentRestored(eventData: any) {
 }
 
 async function activateUserPlan(userId: string, planType: string) {
-  const now = new Date()
-  const expiresAt = new Date(now)
-  expiresAt.setMonth(expiresAt.getMonth() + 1) // 1 mês de validade
+  try {
+    console.log('🔧 Ativando plano para usuário:', userId)
+    console.log('🔧 Tipo de plano:', planType)
+    
+    const now = new Date()
+    const expiresAt = new Date(now)
+    expiresAt.setMonth(expiresAt.getMonth() + 1) // 1 mês de validade
 
-  let updateData: any = {
-    subscriptionPaidAt: now,
-    subscriptionExpiresAt: expiresAt,
+    let updateData: any = {
+      subscriptionPaidAt: now,
+      subscriptionExpiresAt: expiresAt,
+    }
+
+    // Configurar plano baseado no tipo
+    switch (planType) {
+      case 'estudante':
+        updateData = {
+          ...updateData,
+          plan: 'Estudante',
+          planType: 'monthly',
+          articlesLimit: 1,
+          articlesUsed: 0,
+        }
+        break
+      case 'pesquisador':
+        updateData = {
+          ...updateData,
+          plan: 'Pesquisador',
+          planType: 'monthly',
+          articlesLimit: 5,
+          articlesUsed: 0,
+        }
+        break
+      case 'institucional':
+        updateData = {
+          ...updateData,
+          plan: 'Institucional',
+          planType: 'monthly',
+          articlesLimit: null, // Ilimitado
+          articlesUsed: 0,
+        }
+        break
+      default:
+        console.warn('⚠️ Tipo de plano desconhecido:', planType)
+        return
+    }
+
+    console.log('🔧 Dados para atualização:', JSON.stringify(updateData, null, 2))
+    
+    const result = await UserService.update(userId, updateData)
+    console.log('✅ Usuário atualizado com sucesso:', result)
+    
+  } catch (error) {
+    console.error('❌ Erro ao ativar plano do usuário:', error)
+    throw error
   }
-
-  // Configurar plano baseado no tipo
-  switch (planType) {
-    case 'estudante':
-      updateData = {
-        ...updateData,
-        plan: 'Estudante',
-        planType: 'monthly',
-        articlesLimit: 1,
-        articlesUsed: 0,
-      }
-      break
-    case 'pesquisador':
-      updateData = {
-        ...updateData,
-        plan: 'Pesquisador',
-        planType: 'monthly',
-        articlesLimit: 5,
-        articlesUsed: 0,
-      }
-      break
-    case 'institucional':
-      updateData = {
-        ...updateData,
-        plan: 'Institucional',
-        planType: 'monthly',
-        articlesLimit: null, // Ilimitado
-        articlesUsed: 0,
-      }
-      break
-  }
-
-  await UserService.update(userId, updateData)
 }
 
 async function deactivateUserPlan(userId: string) {
@@ -261,8 +273,7 @@ async function handlePaymentUpdated(eventData: any) {
     console.log('📝 Pagamento atualizado:', payment.id)
 
     // Buscar pagamento no banco local
-    const localPayment = await PaymentService.getByAsaasId ? 
-      await PaymentService.getByAsaasId(payment.id) : null
+    const localPayment = await PaymentService.getByAsaasId(payment.id)
 
     if (!localPayment) {
       console.warn('⚠️ Pagamento não encontrado no banco local:', payment.id)
@@ -302,14 +313,55 @@ async function handleSubscriptionCreated(eventData: any) {
   try {
     const { subscription } = eventData
     console.log('📅 Assinatura criada:', subscription.id)
+    console.log('📅 Dados da assinatura:', JSON.stringify(subscription, null, 2))
+
+    // Buscar pagamento no banco local pela assinatura
+    // Como não temos getByAsaasSubscriptionId, vamos buscar por externalReference
+    const localPaymentsResult = await PaymentService.getByUserId(subscription.externalReference || '')
+    
+    if (localPaymentsResult && localPaymentsResult.payments && localPaymentsResult.payments.length > 0) {
+      const localPayment = localPaymentsResult.payments[0] // Pegar o primeiro pagamento do usuário
+      
+      // Validar e processar a data de expiração
+      let expiresAt = undefined
+      if (subscription.nextDueDate) {
+        const parsedDate = new Date(subscription.nextDueDate)
+        if (!isNaN(parsedDate.getTime())) {
+          expiresAt = parsedDate
+        } else {
+          console.warn('⚠️ Data inválida recebida do Asaas:', subscription.nextDueDate)
+          // Calcular data de expiração padrão (1 mês a partir de agora)
+          const defaultExpiresAt = new Date()
+          defaultExpiresAt.setMonth(defaultExpiresAt.getMonth() + 1)
+          expiresAt = defaultExpiresAt
+        }
+      }
+
+      // Atualizar usuário com o subscriptionId usando UserService
+      await UserService.update(localPayment.userId, {
+        subscriptionId: subscription.id,
+        subscriptionStatus: subscription.status || 'active',
+        subscriptionExpiresAt: expiresAt,
+      })
+      
+      console.log(`✅ Usuário ${localPayment.userId} atualizado com subscriptionId: ${subscription.id}`)
+    } else {
+      console.warn('⚠️ Pagamento não encontrado para assinatura:', subscription.id)
+    }
 
     return {
       status: 'processed',
-      actions: ['subscription_created'],
+      actions: ['subscription_created', 'user_updated'],
       subscriptionId: subscription.id,
     }
   } catch (error) {
     console.error('❌ Erro ao processar criação de assinatura:', error)
+    console.error('❌ Detalhes do erro:', {
+      message: error instanceof Error ? error.message : 'Erro desconhecido',
+      stack: error instanceof Error ? error.stack : undefined,
+      eventData: eventData?.subscription?.id,
+      externalReference: eventData?.subscription?.externalReference
+    })
     throw error
   }
 }
@@ -320,8 +372,7 @@ async function handleSubscriptionUpdated(eventData: any) {
     console.log('📝 Assinatura atualizada:', subscription.id)
 
     // Buscar pagamento no banco local pela assinatura
-    const localPayment = await PaymentService.getByAsaasId ? 
-      await PaymentService.getByAsaasId(subscription.id) : null
+    const localPayment = await PaymentService.getByAsaasId(subscription.id)
 
     if (!localPayment) {
       console.warn('⚠️ Assinatura não encontrada no banco local:', subscription.id)
@@ -359,8 +410,7 @@ async function handleSubscriptionCancelled(eventData: any) {
     console.log('❌ Assinatura cancelada:', subscription.id)
 
     // Buscar pagamento no banco local pela assinatura
-    const localPayment = await PaymentService.getByAsaasId ? 
-      await PaymentService.getByAsaasId(subscription.id) : null
+    const localPayment = await PaymentService.getByAsaasId(subscription.id)
 
     if (localPayment) {
       // Desativar plano do usuário
