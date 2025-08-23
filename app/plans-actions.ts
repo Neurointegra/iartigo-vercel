@@ -167,7 +167,7 @@ export async function getPlansByType(planType: string, authToken?: string): Prom
       headers['Authorization'] = `Bearer ${authToken}`
     }
 
-    const response = await fetch(buildApiUrl(`/plans/type/${planType}/`), {
+    const response = await fetch(buildApiUrl(`/plans/by-type/?type=${planType}`), {
       method: 'GET',
       headers,
     })

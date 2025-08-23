@@ -75,14 +75,21 @@ export default function PlansPage() {
   useEffect(() => {
     const loadData = async () => {
       try {
+        console.log('=== INICIANDO CARREGAMENTO DE DADOS ===')
+        console.log('Status do usuário:', { user, isLoading })
+        console.log('getToken disponível:', !!getToken)
+        
         setIsLoadingPlans(true)
         setIsLoadingSubscription(true)
         
         // Carregar planos e assinatura atual se usuário estiver logado
         const token = getToken()
+        console.log('Token disponível:', !!token)
+        
         if (token) {
           try {
             // Carregar planos com autenticação
+            console.log('Carregando planos com autenticação...')
             const plansData = await getPlans(token)
             console.log('Planos recebidos da API:', plansData)
             // Garantir que plansData seja um array
@@ -94,7 +101,9 @@ export default function PlansPage() {
             }
             
             // Carregar assinatura atual
+            console.log('Carregando assinatura atual...')
             const subscription = await getMySubscription(token)
+            console.log('Assinatura carregada:', subscription)
             setCurrentSubscription(subscription)
           } catch (error) {
             console.error('Erro ao carregar dados:', error)
@@ -211,13 +220,13 @@ export default function PlansPage() {
         asaasId: subscription.asaas_subscription_id
       })
       
-      setShowPaymentModal(true)
-      
-      toast({
+        setShowPaymentModal(true)
+        
+        toast({
         title: "Assinatura criada!",
         description: "Sua assinatura foi criada com sucesso.",
-        variant: "default",
-      })
+          variant: "default",
+        })
     } catch (error) {
       console.error('Erro ao criar assinatura:', error)
       toast({
@@ -564,13 +573,13 @@ export default function PlansPage() {
         {!currentSubscription && user && (
           <Card className="mb-8 border-blue-200 bg-blue-50">
             <CardContent className="pt-6">
-              <div className="flex items-center gap-3 text-blue-800">
+                <div className="flex items-center gap-3 text-blue-800">
                 <Info className="h-5 w-5" />
-                <div>
+                  <div>
                   <p className="font-medium">Escolha seu plano!</p>
                   <p className="text-sm">Selecione um dos planos abaixo para começar a usar o iArtigo</p>
                 </div>
-              </div>
+                  </div>
             </CardContent>
           </Card>
         )}
@@ -649,8 +658,8 @@ export default function PlansPage() {
               const isDisabled = currentSubscription?.status === 'active' && !isCurrentPlan
               
               return (
-                <Card 
-                  key={plan.id} 
+            <Card 
+              key={plan.id} 
                   className={`relative bg-white/90 backdrop-blur-sm border-2 transition-all duration-300 hover:shadow-xl ${
                     isCurrentPlan 
                       ? 'border-green-400 shadow-lg ring-2 ring-green-400/30' 
@@ -673,49 +682,49 @@ export default function PlansPage() {
                     <div className="absolute -top-3 left-1/2 transform -translate-x-1/2">
                       <Badge className="bg-blue-500 text-white px-3 py-1">
                         Mais Popular
-                      </Badge>
-                    </div>
-                  )}
-                  
-                  <CardHeader className="text-center pb-4">
-                    <div className="mb-4">
+                  </Badge>
+                </div>
+              )}
+              
+              <CardHeader className="text-center pb-4">
+                <div className="mb-4">
                       {plan.plan_type === 'student' && <Sparkles className="h-12 w-12 mx-auto text-yellow-600" />}
                       {plan.plan_type === 'researcher' && <CreditCard className="h-12 w-12 mx-auto text-blue-600" />}
                       {plan.plan_type === 'institutional' && <Building className="h-12 w-12 mx-auto text-green-600" />}
-                    </div>
-                    <CardTitle className="text-2xl text-gray-800 font-bold">{plan.name}</CardTitle>
-                    <CardDescription className="text-base text-gray-600 leading-relaxed">{plan.description}</CardDescription>
-                    <div className="mt-4">
+                </div>
+                <CardTitle className="text-2xl text-gray-800 font-bold">{plan.name}</CardTitle>
+                <CardDescription className="text-base text-gray-600 leading-relaxed">{plan.description}</CardDescription>
+                <div className="mt-4">
                       <span className="text-4xl font-bold text-gray-800">R$ {plan.monthly_price}</span>
-                      <span className="text-gray-600 font-medium">/mês</span>
-                    </div>
-                    <div className="text-sm text-gray-600 font-medium">
+                  <span className="text-gray-600 font-medium">/mês</span>
+                </div>
+                <div className="text-sm text-gray-600 font-medium">
                       {plan.is_unlimited ? 'Artigos ilimitados' : `${plan.articles_per_month} artigo${plan.articles_per_month > 1 ? 's' : ''} por mês`}
-                    </div>
-                  </CardHeader>
-                  
-                  <CardContent>
-                    <ul className="space-y-3 mb-6">
-                      {plan.features.map((feature, index) => (
-                        <li key={index} className="flex items-center gap-3">
-                          <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
-                          <span className="text-sm text-gray-700 font-medium">{feature}</span>
-                        </li>
-                      ))}
-                    </ul>
-                    
-                    <Button
-                      onClick={() => handleSelectPlan(plan.id)}
+                </div>
+              </CardHeader>
+              
+              <CardContent>
+                <ul className="space-y-3 mb-6">
+                  {plan.features.map((feature, index) => (
+                    <li key={index} className="flex items-center gap-3">
+                      <Check className="h-4 w-4 text-green-500 flex-shrink-0" />
+                      <span className="text-sm text-gray-700 font-medium">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                
+                <Button
+                  onClick={() => handleSelectPlan(plan.id)}
                       disabled={isDisabled || isCurrentPlan}
-                      className={`w-full font-semibold transition-all duration-200 ${
+                  className={`w-full font-semibold transition-all duration-200 ${
                         isCurrentPlan
                           ? 'bg-green-600 hover:bg-green-700 shadow-lg cursor-default'
                           : plan.is_popular 
-                            ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl' 
-                            : selectedPlan === plan.id 
-                              ? 'bg-blue-600 hover:bg-blue-700 shadow-lg'
-                              : 'bg-white hover:bg-gray-50 border-2 border-gray-300 hover:border-blue-400 text-gray-700 hover:text-blue-700'
-                      }`}
+                      ? 'bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl' 
+                      : selectedPlan === plan.id 
+                        ? 'bg-blue-600 hover:bg-blue-700 shadow-lg'
+                        : 'bg-white hover:bg-gray-50 border-2 border-gray-300 hover:border-blue-400 text-gray-700 hover:text-blue-700'
+                  }`}
                       variant={isCurrentPlan ? "default" : selectedPlan === plan.id ? "default" : "outline"}
                     >
                       {isCurrentPlan 
@@ -726,12 +735,12 @@ export default function PlansPage() {
                             ? 'Assinatura Ativa' 
                             : 'Escolher Plano'
                       }
-                    </Button>
-                  </CardContent>
-                </Card>
+                </Button>
+              </CardContent>
+            </Card>
               )
             })}
-          </div>
+        </div>
         )}
 
         {/* Resumo do plano selecionado */}
@@ -813,7 +822,7 @@ export default function PlansPage() {
           </Card>
         )}
 
-        {/* Modal de Pagamento */}
+      {/* Modal de Pagamento */}
         <PaymentModal
           isOpen={showPaymentModal}
           onClose={() => setShowPaymentModal(false)}
