@@ -23,13 +23,15 @@ import {
 import Link from "next/link"
 import { useAuth } from "@/lib/auth-context"
 import { useRouter } from "next/navigation"
+import { generateArticle, checkArticleStatus, downloadArticle } from "@/app/actions"
 
 interface ArticleRequest {
-  requestId: number
-  localId: string
+  id: number
+  request_id: number
   status: string
   title: string
-  createdAt: string
+  created_at: string
+  api_status: string
 }
 
 export default function NewGeneratorPage() {
@@ -139,89 +141,102 @@ export default function NewGeneratorPage() {
     return true
   }
 
-  const startStatusPolling = (requestId: number) => {
+  const startStatusPolling = (generationId: number) => {
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`/api/external-articles/${requestId}`, {
-          method: 'GET',
-        })
+        if (!user?.token) {
+          clearInterval(interval)
+          setPollingInterval(null)
+          setIsGenerating(false)
+          setStatusMessage("Token de autenticação não encontrado")
+          return
+        }
 
-        if (response.ok) {
-          // Verificar se é um arquivo (artigo pronto)
-          const contentType = response.headers.get('content-type')
-          if (contentType && !contentType.includes('application/json')) {
-            // É um arquivo - parar polling e fazer download
+        const result = await checkArticleStatus(generationId, user.token)
+        
+        if (result.generation) {
+          const generation = result.generation
+          setStatusMessage(generation.api_status || generation.status)
+          
+          // Se concluído, parar polling e fazer download
+          if (generation.status === 'completed') {
             clearInterval(interval)
             setPollingInterval(null)
             setIsGenerating(false)
             setStatusMessage("Artigo concluído! Fazendo download...")
 
-            // Fazer download do arquivo
-            const blob = await response.blob()
-            const url = URL.createObjectURL(blob)
-            const a = document.createElement('a')
-            a.href = url
-            
-            // Usar o título limpo para o nome do arquivo
-            const cleanTitle = cleanFileName(formData.title)
-            a.download = `${cleanTitle}.docx`
-            document.body.appendChild(a)
-            a.click()
-            document.body.removeChild(a)
-            URL.revokeObjectURL(url)
-
-            toast({
-              title: "Artigo pronto!",
-              description: "O download foi iniciado automaticamente.",
-              variant: "default",
-            })
-
-            // Limpar estado após sucesso e redirecionar para o dashboard
-            setTimeout(() => {
-              setCurrentRequest(null)
-              setStatusMessage("")
+            try {
+              // Fazer download do arquivo
+              const blob = await downloadArticle(generationId, user.token)
+              const url = URL.createObjectURL(blob)
+              const a = document.createElement('a')
+              a.href = url
               
-              // Redirecionar para o dashboard após 3 segundos
+              // Usar o título limpo para o nome do arquivo
+              const cleanTitle = cleanFileName(formData.title)
+              a.download = `${cleanTitle}.pdf`
+              document.body.appendChild(a)
+              a.click()
+              document.body.removeChild(a)
+              URL.revokeObjectURL(url)
+
               toast({
-                title: "Redirecionando...",
-                description: "Você será redirecionado para o dashboard em alguns segundos.",
+                title: "Artigo pronto!",
+                description: "O download foi iniciado automaticamente.",
                 variant: "default",
               })
-              
+
+              // Limpar estado após sucesso e redirecionar para o dashboard
               setTimeout(() => {
-                router.push('/dashboard')
-              }, 2000)
-            }, 3000)
+                setCurrentRequest(null)
+                setStatusMessage("")
+                
+                // Redirecionar para o dashboard após 3 segundos
+                toast({
+                  title: "Redirecionando...",
+                  description: "Você será redirecionado para o dashboard em alguns segundos.",
+                  variant: "default",
+                })
+                
+                setTimeout(() => {
+                  router.push('/dashboard')
+                }, 2000)
+              }, 3000)
+
+            } catch (downloadError) {
+              console.error('Erro no download:', downloadError)
+              setStatusMessage("Erro no download do artigo")
+              toast({
+                title: "Erro no download",
+                description: "Falha ao baixar o artigo. Tente novamente.",
+                variant: "destructive",
+              })
+            }
 
             return
           }
-
-          // É uma resposta JSON de status
-          const data = await response.json()
-          if (data.success && data.data.status) {
-            setStatusMessage(data.data.status)
+          
+          // Se erro, parar polling
+          if (generation.status === 'error' || generation.status === 'cancelled') {
+            clearInterval(interval)
+            setPollingInterval(null)
+            setIsGenerating(false)
             
-            // Se erro, parar polling
-            if (data.data.status === 'Erro') {
-              clearInterval(interval)
-              setPollingInterval(null)
-              setIsGenerating(false)
-              
-              toast({
-                title: "Erro na geração",
-                description: "Ocorreu um erro durante a geração do artigo.",
-                variant: "destructive",
-              })
-              
-              // Redirecionar para o dashboard após 3 segundos em caso de erro
-              setTimeout(() => {
-                router.push('/dashboard')
-              }, 3000)
-            }
+            toast({
+              title: "Erro na geração",
+              description: "Ocorreu um erro durante a geração do artigo.",
+              variant: "destructive",
+            })
+            
+            // Redirecionar para o dashboard após 3 segundos em caso de erro
+            setTimeout(() => {
+              router.push('/dashboard')
+            }, 3000)
           }
         }
       } catch (error) {
         console.error('Erro ao verificar status:', error)
+        setStatusMessage("Erro ao verificar status")
       }
     }, 5000) // Verificar a cada 5 segundos
 
@@ -240,70 +255,69 @@ export default function NewGeneratorPage() {
       return
     }
 
+    if (!user.token) {
+      toast({
+        title: "Token de autenticação necessário",
+        description: "Faça login novamente para gerar artigos",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsGenerating(true)
     setStatusMessage("Iniciando geração...")
     
     try {
-      // Preparar FormData
-      const formDataToSend = new FormData()
-      
-      // Campos obrigatórios
-      formDataToSend.append('userId', user.id)
-      formDataToSend.append('authorSSN', user.cpf || '')
-      formDataToSend.append('title', formData.title)
-      formDataToSend.append('justification', formData.justification)
-      formDataToSend.append('objective', formData.objective)
-      
-      // Campos opcionais
-      if (formData.resume) formDataToSend.append('resume', formData.resume)
-      if (formData.keywords) formDataToSend.append('keywords', formData.keywords)
-      if (formData.introduction) formDataToSend.append('introduction', formData.introduction)
-      if (formData.articleType) formDataToSend.append('articleType', formData.articleType)
-      if (formData.literatureReview) formDataToSend.append('literatureReview', formData.literatureReview)
-      if (formData.methodology) formDataToSend.append('methodology', formData.methodology)
-      if (formData.discussion) formDataToSend.append('discussion', formData.discussion)
-      if (formData.conclusion) formDataToSend.append('conclusion', formData.conclusion)
-      
-      // Arquivos
-      uploadedFiles.forEach((file) => {
-        formDataToSend.append('files', file)
-      })
-
-      // Chamar API
-      const response = await fetch('/api/external-articles/create', {
-        method: 'POST',
-        body: formDataToSend,
-      })
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Erro na geração do artigo')
+      // Preparar dados para a nova API
+      const articleData = {
+        title: formData.title,
+        abstract: formData.resume || '',
+        keywords: formData.keywords || '',
+        citationStyle: 'ABNT',
+        targetJournal: '',
+        fieldOfStudy: '',
+        methodology: formData.methodology || '',
+        includeCharts: false,
+        includeTables: false,
+        researchObjectives: formData.objective,
+        hypothesis: formData.conclusion || '',
+        sampleSize: '',
+        dataCollection: '',
+        statisticalAnalysis: '',
+        authors: [{
+          id: user.id,
+          name: `${user.firstName || ''} ${user.lastName || ''}`.trim(),
+          institution: user.institution || '',
+          email: user.email || '',
+          department: '',
+          city: '',
+          country: 'Brasil'
+        }],
+        userId: user.id
       }
 
-      const result = await response.json()
+      // Chamar nova API usando actions
+      const result = await generateArticle(articleData, user.token)
       
-      if (result.success) {
-        setCurrentRequest({
-          requestId: result.data.requestId,
-          localId: result.data.localId,
-          status: result.data.status,
-          title: result.data.title,
-          createdAt: result.data.createdAt,
-        })
+      setCurrentRequest({
+        id: result.id,
+        request_id: result.request_id,
+        status: result.status,
+        title: result.title,
+        created_at: result.created_at,
+        api_status: result.api_status
+      })
 
-        setStatusMessage("Artigo enviado para geração...")
-        
-        // Iniciar polling para verificar status
-        startStatusPolling(result.data.requestId)
+      setStatusMessage("Artigo enviado para geração...")
+      
+      // Iniciar polling para verificar status
+      startStatusPolling(result.id)
 
-        toast({
-          title: "Artigo enviado para geração!",
-          description: "Acompanhe o progresso abaixo. O processo pode levar alguns minutos.",
-          variant: "default",
-        })
-      } else {
-        throw new Error('Resposta inesperada da API')
-      }
+      toast({
+        title: "Artigo enviado para geração!",
+        description: "Acompanhe o progresso abaixo. O processo pode levar alguns minutos.",
+        variant: "default",
+      })
 
     } catch (error) {
       console.error('Erro ao gerar artigo:', error)
@@ -663,6 +677,10 @@ export default function NewGeneratorPage() {
               </CardTitle>
               <CardDescription>
                 Título: {currentRequest.title}
+                <br />
+                <span className="text-xs text-blue-600">
+                  ID: {currentRequest.id} | Status: {currentRequest.status}
+                </span>
               </CardDescription>
             </CardHeader>
             <CardContent>

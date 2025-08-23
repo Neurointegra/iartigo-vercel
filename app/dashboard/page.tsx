@@ -43,16 +43,7 @@ interface Author {
   country: string
 }
 
-interface LiteratureSuggestion {
-  title: string
-  authors: string
-  journal: string
-  year: number
-  doi: string
-  abstract: string
-  relevance: string
-  citation: string
-}
+
 
 interface RecentArticle {
   id: string
@@ -147,7 +138,11 @@ export default function DashboardPage() {
 
   // Função para calcular artigos restantes
   const getRemainingArticles = () => {
-    if (!user?.articlesLimit) return null // Plano ilimitado
+    // Se não há plano ativo, retornar 0
+    if (!user?.plan) return 0
+    
+    // Se não há limite definido, retornar null (ilimitado)
+    if (!user?.articlesLimit) return null
     
     // Garantir que completedArticlesCount seja um número válido
     const completed = typeof completedArticlesCount === 'number' ? completedArticlesCount : 0
@@ -168,11 +163,9 @@ export default function DashboardPage() {
       userObject: user
     })
     
-    if (!user?.plan || user?.plan === 'Por Artigo') {
-      console.log('❌ canGenerateArticles - Bloqueado por:', {
-        noPlan: !user?.plan,
-        isPerArticle: user?.plan === 'Por Artigo'
-      })
+    // BLOQUEAR se não há plano ativo
+    if (!user?.plan) {
+      console.log('❌ canGenerateArticles - Bloqueado: sem plano ativo')
       return false
     }
 
@@ -189,7 +182,7 @@ export default function DashboardPage() {
     }
     
     // Se for plano ilimitado, sempre pode gerar (desde que não esteja bloqueado por status)
-    if (!user.articlesLimit) {
+    if (!user.articlesLimit || user.articlesLimit === 0) {
       return true
     }
     
@@ -428,14 +421,14 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {user?.plan && user?.plan !== 'Por Artigo' ? (
+                    {user?.plan ? (
                       // Usuário tem plano ativo
                       <>
                         <div className="flex items-center justify-between">
                           <span className="font-semibold text-lg">{user?.plan}</span>
-                    <Badge variant="secondary" className="bg-green-100 text-green-800">
-                      Ativo
-                    </Badge>
+                          <Badge variant="secondary" className="bg-green-100 text-green-800">
+                            Ativo
+                          </Badge>
                         </div>
                         {user?.subscriptionExpiresAt && (
                           <p className="text-sm text-gray-600">
@@ -459,7 +452,7 @@ export default function DashboardPage() {
                           size="sm" 
                           className="w-full bg-green-600 hover:bg-green-700"
                         >
-                          {user?.plan && user.plan !== 'Por Artigo' && user.subscriptionStatus !== 'cancelled' ? 'Gerenciar Plano' : 'Escolher Plano'}
+                          Escolher Plano
                         </PlansButton>
                       </>
                     )}
@@ -477,9 +470,9 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3">
-                    {user?.plan && user?.plan !== 'Por Artigo' ? (
+                    {user?.plan ? (
                       // Usuário tem plano ativo
-                      user?.articlesLimit ? (
+                      user?.articlesLimit && user.articlesLimit > 0 ? (
                         // Plano com limite mensal
                         <div>
                           {(() => {
@@ -528,7 +521,7 @@ export default function DashboardPage() {
                           })()}
                         </div>
                       ) : (
-                        // Plano ilimitado
+                        // Plano ilimitado (apenas se articlesLimit for null ou 0)
                         <div className="text-center py-2">
                           <div className="flex items-center justify-center mb-3">
                             <span className="text-4xl font-bold text-purple-600">∞</span>
@@ -686,7 +679,7 @@ export default function DashboardPage() {
                                   })
                                 }
                               } else {
-                                router.push(user?.plan && user.plan !== 'Por Artigo' && user.subscriptionStatus !== 'cancelled' ? '/plans/manage' : '/plans')
+                                router.push(user?.plan ? '/plans/manage' : '/plans')
                               }
                             }}
                           >

@@ -1,5 +1,7 @@
 "use server"
 
+import { buildApiUrl, getAuthHeaders } from "@/app/config"
+
 interface Author {
   id: string
   name: string
@@ -8,17 +10,6 @@ interface Author {
   department: string
   city: string
   country: string
-}
-
-interface LiteratureSuggestion {
-  title: string
-  authors: string
-  journal: string
-  year: number
-  doi: string
-  abstract: string
-  relevance: string
-  citation: string
 }
 
 interface ArticleData {
@@ -37,60 +28,143 @@ interface ArticleData {
   dataCollection: string
   statisticalAnalysis: string
   authors: Author[]
-  literatureSuggestions: LiteratureSuggestion[]
   chartIds?: string[]
   userId?: string
 }
 
-export async function generateArticle(data: ArticleData): Promise<string> {
+interface ArticleGenerationRequest {
+  title: string
+  objective: string
+  resume: string
+  keywords: string
+  article_type: string
+  methodology: string
+  conclusion: string
+}
+
+interface ArticleGenerationResponse {
+  id: number
+  request_id: number
+  user: number
+  status: string
+  title: string
+  objective: string
+  resume: string
+  keywords: string
+  article_type: string
+  methodology: string
+  conclusion: string
+  api_status: string
+  created_at: string
+}
+
+export async function generateArticle(data: ArticleData, authToken: string): Promise<ArticleGenerationResponse> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/generate-article`, {
+    // Converter dados para o formato esperado pela nova API Python
+    const apiData: ArticleGenerationRequest = {
+      title: data.title,
+      objective: data.researchObjectives,
+      resume: data.abstract,
+      keywords: data.keywords,
+      article_type: 'research', // Padrão para artigos de pesquisa
+      methodology: data.methodology,
+      conclusion: data.hypothesis || 'Conclusão baseada nos objetivos de pesquisa',
+    }
+
+    const response = await fetch(buildApiUrl('/article-generations/'), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(data),
+      headers: getAuthHeaders(authToken),
+      body: JSON.stringify(apiData),
     })
 
     if (!response.ok) {
-      throw new Error('Falha na geração do artigo')
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Falha na geração do artigo')
     }
 
-    const result = await response.json()
-    return result.content
+    const result: ArticleGenerationResponse = await response.json()
+    return result
   } catch (error) {
     console.error('Erro ao gerar artigo:', error)
     throw new Error('Falha na geração do artigo')
   }
 }
 
-export async function suggestLiterature(params: {
-  fieldOfStudy: string
-  keywords: string
-  title?: string
-  abstract?: string
-}): Promise<LiteratureSuggestion[]> {
+export async function checkArticleStatus(generationId: number, authToken: string): Promise<any> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/suggest-literature`, {
+    const response = await fetch(buildApiUrl(`/article-generations/${generationId}/check_status/`), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        topic: params.title || params.fieldOfStudy,
-        keywords: params.keywords,
-        fieldOfStudy: params.fieldOfStudy
-      }),
+      headers: getAuthHeaders(authToken),
     })
 
     if (!response.ok) {
-      throw new Error('Falha na sugestão de literatura')
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Falha ao verificar status')
     }
 
-    const result = await response.json()
-    return result.suggestions || []
+    return await response.json()
   } catch (error) {
-    console.error('Erro ao sugerir literatura:', error)
-    return []
+    console.error('Erro ao verificar status:', error)
+    throw new Error('Falha ao verificar status do artigo')
   }
 }
+
+export async function downloadArticle(generationId: number, authToken: string): Promise<Blob> {
+  try {
+    const response = await fetch(buildApiUrl(`/article-generations/${generationId}/download/`), {
+      method: 'GET',
+      headers: getAuthHeaders(authToken),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Falha no download')
+    }
+
+    return await response.blob()
+  } catch (error) {
+    console.error('Erro ao fazer download:', error)
+    throw new Error('Falha no download do artigo')
+  }
+}
+
+export async function getMyGenerations(authToken: string): Promise<any[]> {
+  try {
+    const response = await fetch(buildApiUrl('/article-generations/my_generations/'), {
+      method: 'GET',
+      headers: getAuthHeaders(authToken),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Falha ao buscar gerações')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Erro ao buscar gerações:', error)
+    throw new Error('Falha ao buscar gerações')
+  }
+}
+
+export async function cancelGeneration(generationId: number, reason: string, authToken: string): Promise<any> {
+  try {
+    const response = await fetch(buildApiUrl(`/article-generations/${generationId}/cancel/`), {
+      method: 'POST',
+      headers: getAuthHeaders(authToken),
+      body: JSON.stringify({ reason }),
+    })
+
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(errorData.detail || 'Falha ao cancelar geração')
+    }
+
+    return await response.json()
+  } catch (error) {
+    console.error('Erro ao cancelar geração:', error)
+    throw new Error('Falha ao cancelar geração')
+  }
+}
+
+

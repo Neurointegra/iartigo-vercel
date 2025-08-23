@@ -10,16 +10,7 @@ interface Author {
   country: string
 }
 
-interface LiteratureSuggestion {
-  title: string
-  authors: string
-  journal: string
-  year: number
-  doi: string
-  abstract: string
-  relevance: string
-  citation: string
-}
+
 
 interface ArticleData {
   title: string
@@ -37,18 +28,30 @@ interface ArticleData {
   dataCollection: string
   statisticalAnalysis: string
   authors: Author[]
-  literatureSuggestions: LiteratureSuggestion[]
+
   userId?: string
 }
 
 export async function generateArticle(data: ArticleData): Promise<string> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/generate-article`, {
+    // Converter dados para o formato esperado pela API Python
+    const apiData = {
+      title: data.title,
+      objective: data.researchObjectives,
+      resume: data.abstract,
+      keywords: data.keywords,
+      article_type: 'research', // Padrão para artigos de pesquisa
+      methodology: data.methodology,
+      conclusion: data.hypothesis || 'Conclusão baseada nos objetivos de pesquisa',
+    }
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000'}/api/article-generations/`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': process.env.NEXT_PUBLIC_API_TOKEN || '',
       },
-      body: JSON.stringify(data),
+      body: JSON.stringify(apiData),
     })
 
     if (!response.ok) {
@@ -56,40 +59,11 @@ export async function generateArticle(data: ArticleData): Promise<string> {
     }
 
     const result = await response.json()
-    return result.content
+    return result.content || 'Artigo gerado com sucesso'
   } catch (error) {
     console.error('Erro ao gerar artigo:', error)
     throw new Error('Falha na geração do artigo')
   }
 }
 
-export async function suggestLiterature(params: {
-  fieldOfStudy: string
-  keywords: string
-  title?: string
-  abstract?: string
-}): Promise<LiteratureSuggestion[]> {
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3001'}/api/suggest-literature`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        topic: params.title || params.fieldOfStudy,
-        keywords: params.keywords,
-        fieldOfStudy: params.fieldOfStudy
-      }),
-    })
 
-    if (!response.ok) {
-      throw new Error('Falha na sugestão de literatura')
-    }
-
-    const result = await response.json()
-    return result.suggestions || []
-  } catch (error) {
-    console.error('Erro ao sugerir literatura:', error)
-    return []
-  }
-}

@@ -109,7 +109,7 @@ export default function LandingPage() {
         <div className="container mx-auto px-4">
           <div className="max-w-4xl mx-auto text-center">
             <Badge className="mb-4 bg-blue-100 text-blue-800 border-blue-200">
-              🚀 Novo: Sugestões de Literatura com IA
+              🚀 Novo: Geração de Artigos Científicos com IA
             </Badge>
             <h1 className="text-5xl md:text-6xl font-bold text-gray-900 mb-6">
               Gere Artigos Científicos
